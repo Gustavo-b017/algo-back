@@ -3,9 +3,11 @@ from flask import Flask, render_template, jsonify, request  # Framework web e ro
 import requests  # Para requisições HTTP à API externa
 import heapq     # Para uso do heap (estrutura eficiente de ordenação parcial)
 import time      # Para introduzir delays simulando resposta do servidor
+from flask_cors import CORS  # Permite requisições entre domínios (CORS)
 
 # cria a aplicação Flask
 app = Flask(__name__)
+CORS(app)  # Habilita CORS para todas as origens (pode ser restringido se necessário)
 
 # -----------------------------------------------------------------------------
 # 1) AUTENTICAÇÃO - obtém token de acesso para consumir a API protegida
