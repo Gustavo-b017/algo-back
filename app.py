@@ -1,4 +1,3 @@
-# importa as bibliotecas principais
 from flask import Flask, render_template, jsonify, request
 import requests
 import heapq
@@ -9,6 +8,7 @@ import os
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Autenticação com client_credentials
 def obter_token():
     url_token = "https://sso-catalogo.redeancora.com.br/connect/token"
     headers_token = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -22,6 +22,7 @@ def obter_token():
         return response.json().get('access_token')
     return None
 
+# Utilidades
 def get_nome(prod):
     if isinstance(prod, dict):
         if "data" in prod and isinstance(prod["data"], dict):
@@ -83,18 +84,32 @@ def buscar():
         termo = request.args.get("produto", "").strip().lower()
         if not termo:
             return jsonify({"error": "Nome do produto nao informado"}), 400
+
         time.sleep(0.002)
         pagina = int(request.args.get("pagina", "1")) - 1
         itens_por_pagina = int(request.args.get("itensPorPagina", "15"))
         ordem = request.args.get("ordem", "asc").strip().lower()
         asc = ordem == "asc"
+
         token = obter_token()
         if not token:
             return jsonify({"error": "Erro ao obter token"}), 500
+
         produtos = buscar_produtos(token, termo, pagina, itens_por_pagina)
+
         if len(produtos) > 1:
             produtos = quick_sort(produtos, asc)
-        return jsonify(produtos)
+
+        # ✅ Encapsular a resposta no formato esperado pelo front
+        brands = list({p["data"]["marca"] if "data" in p and "marca" in p["data"] else p.get("marca", "") for p in produtos if p})
+        
+        print(f"[LOG] Retornando {len(produtos)} produtos e {len(brands)} marcas")  # Debug log
+
+        return jsonify({
+            "results": produtos,
+            "brands": brands
+        })
+
     except Exception as e:
         return jsonify({"error": "Internal server error", "message": str(e)}), 500
 
