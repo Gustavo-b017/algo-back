@@ -7,7 +7,7 @@ from flask_cors import CORS  # Permite requisições entre domínios (CORS)
 
 # cria a aplicação Flask
 app = Flask(__name__)
-CORS(app)  # Habilita CORS para todas as origens (pode ser restringido se necessário)
+CORS(app, resources={r"/*": {"origins": "https://algo-front-three.vercel.app"}})  # Habilita CORS para todas as origens (pode ser restringido se necessário)
 
 # -----------------------------------------------------------------------------
 # 1) AUTENTICAÇÃO - obtém token de acesso para consumir a API protegida
