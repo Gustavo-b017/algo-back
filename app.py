@@ -4,6 +4,7 @@ import requests  # Para requisições HTTP à API externa
 import heapq     # Para uso do heap (estrutura eficiente de ordenação parcial)
 import time      # Para introduzir delays simulando resposta do servidor
 from flask_cors import CORS  # Permite requisições entre domínios (CORS)
+import os
 
 # cria a aplicação Flask
 app = Flask(__name__)
@@ -213,4 +214,5 @@ def heap_endpoint():
 # 7) EXECUÇÃO DA APLICAÇÃO - inicia o servidor Flask em modo debug
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
