@@ -86,3 +86,89 @@ def buscar():
         "pagina": pagina,
         "itensPorPagina": itens_por_pagina
     })
+
+
+@app.route("/tabela", methods=["GET"])
+def tabela():
+    produto = request.args.get("produto", "").strip().lower()
+    marca = request.args.get("marca", "").strip().lower()
+    pagina = int(request.args.get("pagina", 1))
+    itens_por_pagina = int(request.args.get("itensPorPagina", 15))
+    ordem = request.args.get("ordem", "asc").lower()
+
+    cache_key = f"tabela::{produto}::{marca}"
+    if cache_key in produto_cache:
+        dados = produto_cache[cache_key]
+    else:
+        token = obter_token()
+        if not token:
+            return jsonify({"error": "Token inválido"}), 401
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        url = f"https://catalogo.redeancora.com.br/produtos/buscar?termo={produto}"
+        response = requests.get(url, headers=headers, verify=False)
+        if response.status_code != 200:
+            return jsonify({"error": "Erro externo"}), 502
+        produtos = response.json().get("results", [])
+        filtrados = [
+            {
+                "nome": p.get("data", {}).get("nomeProduto") or p.get("nomeProduto", ""),
+                "marca": p.get("data", {}).get("marca") or p.get("marca", ""),
+                "preco": p.get("data", {}).get("preco", 0),
+                "ano": p.get("data", {}).get("ano", ""),
+                "potencia": p.get("data", {}).get("potencia", "")
+            }
+            for p in produtos if marca in (p.get("data", {}).get("marca", "") or p.get("marca", "")).lower()
+        ]
+        filtrados.sort(key=lambda x: x["nome"].lower(), reverse=(ordem == "desc"))
+        produto_cache[cache_key] = filtrados
+
+    inicio = (pagina - 1) * itens_por_pagina
+    fim = inicio + itens_por_pagina
+    return jsonify({
+        "results": dados[inicio:fim],
+        "total": len(dados),
+        "pagina": pagina
+    })
+
+@app.route("/heap", methods=["GET"])
+def heap():
+    produto = request.args.get("produto", "").strip().lower()
+    marca = request.args.get("marca", "").strip().lower()
+    criterio = request.args.get("criterio", "hp").lower()
+    modo = request.args.get("modo", "maior")
+    k = int(request.args.get("k", 5))
+
+    cache_key = f"heap::{produto}::{marca}"
+    if cache_key in produto_cache:
+        produtos = produto_cache[cache_key]
+    else:
+        token = obter_token()
+        if not token:
+            return jsonify({"error": "Token inválido"}), 401
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        url = f"https://catalogo.redeancora.com.br/produtos/buscar?termo={produto}"
+        response = requests.get(url, headers=headers, verify=False)
+        if response.status_code != 200:
+            return jsonify({"error": "Erro externo"}), 502
+        produtos_raw = response.json().get("results", [])
+        produtos = [
+            {
+                "nome": p.get("data", {}).get("nomeProduto") or p.get("nomeProduto", ""),
+                "marca": p.get("data", {}).get("marca") or p.get("marca", ""),
+                "potencia": p.get("data", {}).get("potencia", 0),
+                "ano": p.get("data", {}).get("ano", "")
+            }
+            for p in produtos_raw if marca in (p.get("data", {}).get("marca", "") or p.get("marca", "")).lower()
+        ]
+        produto_cache[cache_key] = produtos
+
+    key_func = lambda x: x.get(criterio, 0)
+    heap = heapq.nlargest(k, produtos, key=key_func) if modo == "maior" else heapq.nsmallest(k, produtos, key=key_func)
+
+    return jsonify(heap)
