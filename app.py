@@ -1,15 +1,16 @@
 
 from flask import Flask, jsonify, request
-import requests
-import heapq
-import time
 from flask_cors import CORS
 from flask_compress import Compress
 from cachetools import TTLCache
+import requests
+import heapq
 import os
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+
+# CORS configurado para o domínio da Vercel
+CORS(app, resources={r"/*": {"origins": "https://algo-front-kohl.vercel.app"}})
 Compress(app)
 
 # Cache global
