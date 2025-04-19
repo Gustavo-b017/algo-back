@@ -1,5 +1,5 @@
-flask
-flask-cors
-flask-compress
 cachetools
+flask
+flask-compress
+flask-cors
 requests
