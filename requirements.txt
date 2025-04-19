@@ -1,3 +1,5 @@
 flask
-requests
 flask-cors
+flask-compress
+cachetools
+requests
