@@ -162,37 +162,56 @@ def tabela():
     try:
         produto = request.args.get("produto", "").strip().lower()
         marca = request.args.get("marca", "").strip().lower()
-        pagina = int(request.args.get("pagina", "1")) - 1
-        itens_por_pagina = int(request.args.get("itensPorPagina", "15"))
+        pagina = int(request.args.get("pagina", 1)) - 1
+        itens_por_pagina = int(request.args.get("itensPorPagina", 15))
         ordem = request.args.get("ordem", "asc").strip().lower()
         asc = ordem == "asc"
-
-        if not produto or not marca:
-            return jsonify({"error": "Produto ou marca não informados"}), 400
 
         token = obter_token()
         if not token:
             return jsonify({"error": "Erro ao obter token"}), 500
 
-        produtos = buscar_produtos(token, produto, 0, 1000)
-        filtrados = [p for p in produtos if (p.get("data", {}).get("marca") or p.get("marca", "")).lower() == marca]
+        produtos = buscar_produtos(token, produto, pagina, itens_por_pagina * 10)
 
-        if len(filtrados) > 1:
-            filtrados = quick_sort(filtrados, asc)
+        produtos_formatados = []
+        for p in produtos:
+            data = p.get("data", {})
+            nome = data.get("nomeProduto", "") or p.get("nomeProduto", "")
+            marca_prod = data.get("marca", "") or p.get("marca", "")
+            ano = data.get("ano", "")
+            potencia = data.get("potencia", "")
+            aplicacoes = data.get("aplicacoes", [])
 
+            montadora = aplicacoes[0].get("montadora", "") if aplicacoes else ""
+            carroceria = aplicacoes[0].get("carroceria", "") if aplicacoes else ""
+
+            if marca.lower() in marca_prod.lower():
+                produtos_formatados.append({
+                    "nome": nome,
+                    "marca": marca_prod,
+                    "ano": ano,
+                    "potencia": potencia,
+                    "montadora": montadora,
+                    "carroceria": carroceria
+                })
+
+        # ✅ Ordenar via quick_sort
+        produtos_ordenados = quick_sort(produtos_formatados, asc, key_func=lambda p: (p.get("nome") or "").lower())
+
+        # ✅ Paginação
         inicio = pagina * itens_por_pagina
         fim = inicio + itens_por_pagina
-        resultados_paginados = filtrados[inicio:fim]
+        paginados = produtos_ordenados[inicio:fim]
 
         return jsonify({
-            "results": resultados_paginados,
-            "total": len(filtrados),
+            "results": paginados,
+            "total": len(produtos_ordenados),
             "pagina": pagina + 1,
             "itensPorPagina": itens_por_pagina
         })
+
     except Exception as e:
         return jsonify({"error": "Internal server error", "message": str(e)}), 500
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
