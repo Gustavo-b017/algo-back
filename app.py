@@ -87,35 +87,72 @@ def index():
 def buscar():
     try:
         termo = request.args.get("produto", "").strip().lower()
-        if not termo:
-            return jsonify({"error": "Nome do produto nao informado"}), 400
-
+        marca_filtro = request.args.get("marca", "").strip().lower()
+        ordem = request.args.get("ordem", "asc").strip().lower()
         pagina = int(request.args.get("pagina", "1")) - 1
         itens_por_pagina = int(request.args.get("itensPorPagina", "15"))
-        ordem = request.args.get("ordem", "asc").strip().lower()
         asc = ordem == "asc"
+
+        if not termo:
+            return jsonify({"error": "Nome do produto não informado"}), 400
 
         token = obter_token()
         if not token:
             return jsonify({"error": "Erro ao obter token"}), 500
 
-        produtos = buscar_produtos(token, termo, pagina, itens_por_pagina)
+        brutos = buscar_produtos(token, termo, 0, 200)
 
-        if len(produtos) > 1:
-            produtos = quick_sort(produtos, asc)
+        # Extrair dados relevantes
+        filtrados = []
+        marcas = set()
+        for item in brutos:
+            data = item.get("data", {})
+            nome = data.get("nomeProduto", "")
+            marca = data.get("marca", "") or item.get("marca", "")
+            marcas.add(marca.upper())
+            if marca_filtro and marca_filtro not in marca.lower():
+                continue
 
-        marcas = list({p.get("data", {}).get("marca", "") or p.get("marca", "") for p in produtos if p})
+            aplicacoes = data.get("aplicacoes", [])
+            if aplicacoes:
+                for app in aplicacoes:
+                    filtrados.append({
+                        "nome": nome,
+                        "marca": marca,
+                        "montadora": app.get("montadora", ""),
+                        "carroceria": app.get("carroceria", ""),
+                        "ano": f"{app.get('fabricacaoInicial', '')} - {app.get('fabricacaoFinal', '')}",
+                        "potencia": app.get("hp", "")
+                    })
+            else:
+                filtrados.append({
+                    "nome": nome,
+                    "marca": marca,
+                    "montadora": "",
+                    "carroceria": "",
+                    "ano": "",
+                    "potencia": ""
+                })
+
+        # Ordenar
+        filtrados = quick_sort(filtrados, asc=asc, key_func=lambda x: x["nome"].lower())
+
+        # Paginação
+        inicio = pagina * itens_por_pagina
+        fim = inicio + itens_por_pagina
+        pagina_resultados = filtrados[inicio:fim]
 
         return jsonify({
-            "results": produtos,
-            "brands": marcas,
+            "results": pagina_resultados,
+            "total": len(filtrados),
             "pagina": pagina + 1,
             "itensPorPagina": itens_por_pagina,
-            "total": len(produtos)
+            "brands": sorted(list(marcas))
         })
 
     except Exception as e:
         return jsonify({"error": "Internal server error", "message": str(e)}), 500
+
 
 @app.route("/autocomplete", methods=["GET"])
 def autocomplete():
