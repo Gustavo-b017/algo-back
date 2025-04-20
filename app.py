@@ -92,6 +92,36 @@ def buscar():
 def home():
     return "Backend da API está no ar!"
 
+@app.route("/autocomplete", methods=["GET"])
+def autocomplete():
+    prefix = request.args.get("prefix", "").strip().lower()
+    if not prefix:
+        return jsonify([])
+
+    token = obter_token()
+    if not token:
+        return jsonify([])
+
+    url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "produtoFiltro": {"nomeProduto": prefix},
+        "pagina": 0,
+        "itensPorPagina": 100
+    }
+
+    res = requests.post(url_api, headers=headers, json=payload, verify=False)
+    if res.status_code != 200:
+        return jsonify([])
+
+    produtos = res.json().get("results", [])
+    nomes = {p.get("data", {}).get("nomeProduto", "").lower() for p in produtos if p.get("data")}
+    sugestoes = sorted([n for n in nomes if prefix in n])[:8]
+    return jsonify(sugestoes)
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
