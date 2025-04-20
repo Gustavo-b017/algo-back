@@ -88,6 +88,11 @@ def buscar():
         "brands": list(marcas)
     })
 
+@app.route("/")
+def home():
+    return "Backend da API está no ar!"
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host="0.0.0.0", port=port)
