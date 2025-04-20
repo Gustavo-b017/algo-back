@@ -1,255 +1,93 @@
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask_compress import Compress
-from cachetools import TTLCache
 import requests
-import heapq
-import time
+from cachetools import TTLCache
 import os
 
 app = Flask(__name__)
 CORS(app)
-Compress(app)
+token_cache = TTLCache(maxsize=1, ttl=3500)
 
-# Cache para token e produtos
-token_cache = TTLCache(maxsize=1, ttl=3500)  # ~58 minutos
-
-# Autenticação com client_credentials com cache
 def obter_token():
     if "token" in token_cache:
         return token_cache["token"]
     url_token = "https://sso-catalogo.redeancora.com.br/connect/token"
-    headers_token = {"Content-Type": "application/x-www-form-urlencoded"}
-    data_token = {
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    data = {
         "grant_type": "client_credentials",
         "client_id": "65tvh6rvn4d7uer3hqqm2p8k2pvnm5wx",
         "client_secret": "9Gt2dBRFTUgunSeRPqEFxwNgAfjNUPLP5EBvXKCn"
     }
-    response = requests.post(url_token, headers=headers_token, data=data_token, verify=False)
-    if response.status_code == 200:
-        token = response.json().get('access_token')
-        token_cache["token"] = token
-        return token
+    res = requests.post(url_token, headers=headers, data=data, verify=False)
+    if res.status_code == 200:
+        token_cache["token"] = res.json().get("access_token")
+        return token_cache["token"]
     return None
 
-def get_nome(prod):
-    if isinstance(prod, dict):
-        if "data" in prod and isinstance(prod["data"], dict):
-            return (prod["data"].get("nomeProduto") or "").lower()
-        return (prod.get("nomeProduto") or "").lower()
-    return ""
+@app.route("/buscar", methods=["GET"])
+def buscar():
+    termo = request.args.get("produto", "").strip().lower()
+    marca_filtro = request.args.get("marca", "").strip().lower()
+    ordem = request.args.get("ordem", "asc").lower()
 
-def get_numeric(prod, key):
-    try:
-        if isinstance(prod, dict):
-            if "data" in prod and isinstance(prod["data"], dict):
-                return float(prod["data"].get(key) or 0)
-            return float(prod.get(key) or 0)
-    except (ValueError, TypeError):
-        return 0
-    return 0
+    token = obter_token()
+    if not token:
+        return jsonify({"error": "Token inválido"}), 401
 
-def quick_sort(produtos, asc=True, key_func=get_nome):
-    if len(produtos) <= 1:
-        return produtos
-    pivot = produtos[len(produtos) // 2]
-    pivot_key = key_func(pivot)
-    left = [p for p in produtos if key_func(p) < pivot_key]
-    middle = [p for p in produtos if key_func(p) == pivot_key]
-    right = [p for p in produtos if key_func(p) > pivot_key]
-    return quick_sort(left, asc, key_func) + middle + quick_sort(right, asc, key_func) if asc else quick_sort(right, asc, key_func) + middle + quick_sort(left, asc, key_func)
-
-def buscar_produtos(token, termo, pagina=0, itens_por_pagina=15):
-    api_url = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
+    url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
     payload = {
         "produtoFiltro": {"nomeProduto": termo},
-        "pagina": pagina,
-        "itensPorPagina": itens_por_pagina
+        "pagina": 0,
+        "itensPorPagina": 200
     }
-    response = requests.post(api_url, headers=headers, json=payload, verify=False)
-    if response.status_code == 200:
-        try:
-            return response.json().get("pageResult", {}).get("data", [])
-        except Exception:
-            return []
-    return []
+    res = requests.post(url_api, headers=headers, json=payload, verify=False)
+    if res.status_code != 200:
+        return jsonify({"error": "Erro ao buscar dados"}), 502
 
-@app.route("/")
-def index():
-    return "API está funcionando!"
+    produtos = res.json().get("results", [])
+    resultados = []
+    marcas = set()
 
-@app.route("/buscar", methods=["GET"])
-def buscar():
-    try:
-        termo = request.args.get("produto", "").strip().lower()
-        marca_filtro = request.args.get("marca", "").strip().lower()
-        ordem = request.args.get("ordem", "asc").strip().lower()
-        pagina = int(request.args.get("pagina", "1")) - 1
-        itens_por_pagina = int(request.args.get("itensPorPagina", "15"))
-        asc = ordem == "asc"
+    for p in produtos:
+        data = p.get("data", {})
+        nome = data.get("nomeProduto", "")
+        marca = data.get("marca", "")
+        marcas.add(marca)
+        if marca_filtro and marca.lower() != marca_filtro:
+            continue
 
-        if not termo:
-            return jsonify({"error": "Nome do produto não informado"}), 400
+        aplicacoes = data.get("aplicacoes", [])
+        if aplicacoes:
+            primeira_aplicacao = aplicacoes[0]
+            montadora = primeira_aplicacao.get("montadora", "")
+            carroceria = primeira_aplicacao.get("carroceria", "")
+            potencia = primeira_aplicacao.get("hp", "")
+            ano_ini = primeira_aplicacao.get("fabricacaoInicial", "")
+            ano_fim = primeira_aplicacao.get("fabricacaoFinal", "")
+            ano = f"{ano_ini} - {ano_fim}" if ano_ini and ano_fim else "-"
+        else:
+            montadora = carroceria = potencia = ano = "-"
 
-        token = obter_token()
-        if not token:
-            return jsonify({"error": "Erro ao obter token"}), 500
-
-        brutos = buscar_produtos(token, termo, 0, 200)
-
-        # Extrair dados relevantes
-        filtrados = []
-        marcas = set()
-        for item in brutos:
-            data = item.get("data", {})
-            nome = data.get("nomeProduto", "")
-            marca = data.get("marca", "") or item.get("marca", "")
-            marcas.add(marca.upper())
-            if marca_filtro and marca_filtro not in marca.lower():
-                continue
-
-            aplicacoes = data.get("aplicacoes", [])
-            if aplicacoes:
-                for app in aplicacoes:
-                    filtrados.append({
-                        "nome": nome,
-                        "marca": marca,
-                        "montadora": app.get("montadora", ""),
-                        "carroceria": app.get("carroceria", ""),
-                        "ano": f"{app.get('fabricacaoInicial', '')} - {app.get('fabricacaoFinal', '')}",
-                        "potencia": app.get("hp", "")
-                    })
-            else:
-                filtrados.append({
-                    "nome": nome,
-                    "marca": marca,
-                    "montadora": "",
-                    "carroceria": "",
-                    "ano": "",
-                    "potencia": ""
-                })
-
-        # Ordenar
-        filtrados = quick_sort(filtrados, asc=asc, key_func=lambda x: x["nome"].lower())
-
-        # Paginação
-        inicio = pagina * itens_por_pagina
-        fim = inicio + itens_por_pagina
-        pagina_resultados = filtrados[inicio:fim]
-
-        return jsonify({
-            "results": pagina_resultados,
-            "total": len(filtrados),
-            "pagina": pagina + 1,
-            "itensPorPagina": itens_por_pagina,
-            "brands": sorted(list(marcas))
+        resultados.append({
+            "nome": nome,
+            "marca": marca,
+            "montadora": montadora,
+            "carroceria": carroceria,
+            "ano": ano,
+            "potencia": potencia
         })
 
-    except Exception as e:
-        return jsonify({"error": "Internal server error", "message": str(e)}), 500
-
-
-@app.route("/autocomplete", methods=["GET"])
-def autocomplete():
-    try:
-        prefix = request.args.get("prefix", "").strip().lower()
-        if not prefix:
-            return jsonify([])
-
-        token = obter_token()
-        if not token:
-            return jsonify({"error": "Erro ao obter token"}), 500
-
-        produtos = buscar_produtos(token, prefix, 0, 1000)
-        nomes = list({get_nome(p) for p in produtos if get_nome(p)})
-        sugestoes = [nome for nome in nomes if prefix in nome][:8]
-        return jsonify(sugestoes)
-    except Exception as e:
-        return jsonify({"error": "Internal server error", "message": str(e)}), 500
-
-@app.route("/heap", methods=["GET"])
-def heap_endpoint():
-    try:
-        produto = request.args.get("produto", "").strip()
-        if not produto:
-            return jsonify({"error": "Nome do produto nao informado"}), 400
-        k = int(request.args.get("k", "5"))
-        largest = request.args.get("modo", "maior").lower() == "maior"
-        key_field = request.args.get("criterio", "hp").strip()
-        marca = request.args.get("marca", "").strip().lower()
-        token = obter_token()
-        if not token:
-            return jsonify({"error": "Erro ao obter token"}), 500
-        produtos = buscar_produtos(token, produto, 0, 200)
-        filtrados = [p for p in produtos if (p.get("data", {}).get("marca") or p.get("marca", "")).lower() == marca]
-        selecionados = heapq.nlargest(k, filtrados, key=lambda p: get_numeric(p, key_field)) if largest else heapq.nsmallest(k, filtrados, key=lambda p: get_numeric(p, key_field))
-        resultado = quick_sort(selecionados, asc=not largest, key_func=lambda p: get_numeric(p, key_field))
-        return jsonify(resultado)
-    except Exception as e:
-        return jsonify({"error": "Internal server error", "message": str(e)}), 500
-
-
-@app.route("/tabela", methods=["GET"])
-def tabela():
-    try:
-        produto = request.args.get("produto", "").strip().lower()
-        marca = request.args.get("marca", "").strip().lower()
-        pagina = int(request.args.get("pagina", 1)) - 1
-        itens_por_pagina = int(request.args.get("itensPorPagina", 15))
-        ordem = request.args.get("ordem", "asc").strip().lower()
-        asc = ordem == "asc"
-
-        token = obter_token()
-        if not token:
-            return jsonify({"error": "Erro ao obter token"}), 500
-
-        produtos = buscar_produtos(token, produto, pagina, itens_por_pagina * 10)
-
-        produtos_formatados = []
-        for p in produtos:
-            data = p.get("data", {})
-            nome = data.get("nomeProduto", "") or p.get("nomeProduto", "")
-            marca_prod = data.get("marca", "") or p.get("marca", "")
-            ano = data.get("ano", "")
-            potencia = data.get("potencia", "")
-            aplicacoes = data.get("aplicacoes", [])
-
-            montadora = aplicacoes[0].get("montadora", "") if aplicacoes else ""
-            carroceria = aplicacoes[0].get("carroceria", "") if aplicacoes else ""
-
-            if marca.lower() in marca_prod.lower():
-                produtos_formatados.append({
-                    "nome": nome,
-                    "marca": marca_prod,
-                    "ano": ano,
-                    "potencia": potencia,
-                    "montadora": montadora,
-                    "carroceria": carroceria
-                })
-
-        # ✅ Ordenar via quick_sort
-        produtos_ordenados = quick_sort(produtos_formatados, asc, key_func=lambda p: (p.get("nome") or "").lower())
-
-        # ✅ Paginação
-        inicio = pagina * itens_por_pagina
-        fim = inicio + itens_por_pagina
-        paginados = produtos_ordenados[inicio:fim]
-
-        return jsonify({
-            "results": paginados,
-            "total": len(produtos_ordenados),
-            "pagina": pagina + 1,
-            "itensPorPagina": itens_por_pagina
-        })
-
-    except Exception as e:
-        return jsonify({"error": "Internal server error", "message": str(e)}), 500
+    resultados.sort(key=lambda x: x["nome"].lower(), reverse=(ordem == "desc"))
+    return jsonify({
+        "results": resultados,
+        "brands": list(marcas)
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    app.run(debug=False, host="0.0.0.0", port=port)
