@@ -1,3 +1,4 @@
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_compress import Compress
@@ -154,6 +155,44 @@ def heap_endpoint():
         return jsonify(resultado)
     except Exception as e:
         return jsonify({"error": "Internal server error", "message": str(e)}), 500
+
+
+@app.route("/tabela", methods=["GET"])
+def tabela():
+    try:
+        produto = request.args.get("produto", "").strip().lower()
+        marca = request.args.get("marca", "").strip().lower()
+        pagina = int(request.args.get("pagina", "1")) - 1
+        itens_por_pagina = int(request.args.get("itensPorPagina", "15"))
+        ordem = request.args.get("ordem", "asc").strip().lower()
+        asc = ordem == "asc"
+
+        if not produto or not marca:
+            return jsonify({"error": "Produto ou marca não informados"}), 400
+
+        token = obter_token()
+        if not token:
+            return jsonify({"error": "Erro ao obter token"}), 500
+
+        produtos = buscar_produtos(token, produto, 0, 1000)
+        filtrados = [p for p in produtos if (p.get("data", {}).get("marca") or p.get("marca", "")).lower() == marca]
+
+        if len(filtrados) > 1:
+            filtrados = quick_sort(filtrados, asc)
+
+        inicio = pagina * itens_por_pagina
+        fim = inicio + itens_por_pagina
+        resultados_paginados = filtrados[inicio:fim]
+
+        return jsonify({
+            "results": resultados_paginados,
+            "total": len(filtrados),
+            "pagina": pagina + 1,
+            "itensPorPagina": itens_por_pagina
+        })
+    except Exception as e:
+        return jsonify({"error": "Internal server error", "message": str(e)}), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
