@@ -46,6 +46,9 @@ def buscar():
         "itensPorPagina": 200
     }
     res = requests.post(url_api, headers=headers, json=payload, verify=False)
+    print("API status:", res.status_code)
+    print("API res:", res.text)  # Adicione esta linha
+
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar dados"}), 502
 
