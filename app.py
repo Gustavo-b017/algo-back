@@ -1,4 +1,3 @@
-
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
@@ -45,34 +44,28 @@ def buscar():
         "pagina": 0,
         "itensPorPagina": 200
     }
-    res = requests.post(url_api, headers=headers, json=payload, verify=False)
-    print("API status:", res.status_code)
-    print("API res:", res.text)  # Adicione esta linha
 
+    res = requests.post(url_api, headers=headers, json=payload, verify=False)
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar dados"}), 502
 
     produtos = res.json().get("results", [])
     resultados = []
-    marcas = set()
 
     for p in produtos:
         data = p.get("data", {})
         nome = data.get("nomeProduto", "")
         marca = data.get("marca", "")
-        marcas.add(marca)
         if marca_filtro and marca.lower() != marca_filtro:
             continue
 
         aplicacoes = data.get("aplicacoes", [])
         if aplicacoes:
-            primeira_aplicacao = aplicacoes[0]
-            montadora = primeira_aplicacao.get("montadora", "")
-            carroceria = primeira_aplicacao.get("carroceria", "")
-            potencia = primeira_aplicacao.get("hp", "")
-            ano_ini = primeira_aplicacao.get("fabricacaoInicial", "")
-            ano_fim = primeira_aplicacao.get("fabricacaoFinal", "")
-            ano = f"{ano_ini} - {ano_fim}" if ano_ini and ano_fim else "-"
+            a = aplicacoes[0]
+            montadora = a.get("montadora", "")
+            carroceria = a.get("carroceria", "")
+            potencia = a.get("hp", "")
+            ano = f"{a.get('fabricacaoInicial', '')} - {a.get('fabricacaoFinal', '')}"
         else:
             montadora = carroceria = potencia = ano = "-"
 
@@ -81,16 +74,12 @@ def buscar():
             "marca": marca,
             "montadora": montadora,
             "carroceria": carroceria,
-            "ano": ano,
+            "ano": ano if ano.strip() != "-" else "-",
             "potencia": potencia
         })
 
     resultados.sort(key=lambda x: x["nome"].lower(), reverse=(ordem == "desc"))
-    return jsonify({
-        "results": resultados,
-        "brands": list(marcas)
-    })
-
+    return jsonify(resultados)
 @app.route("/")
 def home():
     return "Backend da API está no ar!"
