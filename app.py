@@ -45,27 +45,38 @@ def buscar():
         "itensPorPagina": 200
     }
 
+    print("Token usado:", token)
+    print("Payload enviado:", payload)
+    print("Cabeçalhos:", headers)
+
     res = requests.post(url_api, headers=headers, json=payload, verify=False)
+    print("API status:", res.status_code)
+    print("API res:", res.text)
+
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar dados"}), 502
 
     produtos = res.json().get("results", [])
     resultados = []
+    marcas = set()
 
     for p in produtos:
         data = p.get("data", {})
         nome = data.get("nomeProduto", "")
         marca = data.get("marca", "")
+        marcas.add(marca)
         if marca_filtro and marca.lower() != marca_filtro:
             continue
 
         aplicacoes = data.get("aplicacoes", [])
         if aplicacoes:
-            a = aplicacoes[0]
-            montadora = a.get("montadora", "")
-            carroceria = a.get("carroceria", "")
-            potencia = a.get("hp", "")
-            ano = f"{a.get('fabricacaoInicial', '')} - {a.get('fabricacaoFinal', '')}"
+            primeira_aplicacao = aplicacoes[0]
+            montadora = primeira_aplicacao.get("montadora", "")
+            carroceria = primeira_aplicacao.get("carroceria", "")
+            potencia = primeira_aplicacao.get("hp", "")
+            ano_ini = primeira_aplicacao.get("fabricacaoInicial", "")
+            ano_fim = primeira_aplicacao.get("fabricacaoFinal", "")
+            ano = f"{ano_ini} - {ano_fim}" if ano_ini and ano_fim else "-"
         else:
             montadora = carroceria = potencia = ano = "-"
 
@@ -74,12 +85,16 @@ def buscar():
             "marca": marca,
             "montadora": montadora,
             "carroceria": carroceria,
-            "ano": ano if ano.strip() != "-" else "-",
+            "ano": ano,
             "potencia": potencia
         })
 
     resultados.sort(key=lambda x: x["nome"].lower(), reverse=(ordem == "desc"))
-    return jsonify(resultados)
+    return jsonify({
+        "results": resultados,
+        "brands": list(marcas)
+    })
+
 @app.route("/")
 def home():
     return "Backend da API está no ar!"
@@ -113,7 +128,6 @@ def autocomplete():
     nomes = {p.get("data", {}).get("nomeProduto", "").lower() for p in produtos if p.get("data")}
     sugestoes = sorted([n for n in nomes if prefix in n])[:8]
     return jsonify(sugestoes)
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
