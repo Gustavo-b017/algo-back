@@ -41,11 +41,19 @@ def requisitar_produtos(token, termo, pagina, itens_por_pagina):
         "Content-Type": "application/json"
     }
     payload = {
-        "produtoFiltro": {"nomeProduto": termo},
+        "produtoFiltro": {
+            "nomeProduto": termo
+        },
+        "veiculoFiltro": {
+            "veiculoPlaca": "DEM8i14"
+        },
         "pagina": pagina,
         "itensPorPagina": itens_por_pagina
     }
+    print("🔍 Payload enviado:", payload)
     res = requests.post(url_api, headers=headers, json=payload, verify=False)
+    print("📡 Status:", res.status_code)
+    print("📦 Resposta:", res.text)
     return res
 
 @app.route("/buscar", methods=["GET"])
@@ -124,4 +132,4 @@ def home():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host="0.0.0.0", port=port)
+    app.run(debug=True, host="0.0.0.0", port=port)
