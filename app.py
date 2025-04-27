@@ -149,15 +149,15 @@ def autocomplete():
 def produto():
     global produto_detalhado_bruto, item_consumido, similares_consumido
 
-    produto_id = request.args.get("id", "").strip()
-    if not produto_id:
+    codigo = request.args.get("codigoReferencia", "").strip()
+    if not codigo:
         return jsonify({"error": "ID do produto não informado"}), 400
 
     token = obter_token()
     if not token:
         return jsonify({"error": "Token inválido"}), 401
 
-    url = f"https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/{produto_id}"
+    url = f"https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/{codigo}"
     headers = {"Authorization": f"Bearer {token}"}
     res = requests.get(url, headers=headers)
 

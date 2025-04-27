@@ -4,7 +4,7 @@ def tratar_dados(lista):
         data = item.get("data", {})
         nome = data.get("nomeProduto", "")
         marca = data.get("marca", "")
-        id = data.get("id", "")
+        codigo_referencia = data.get("codigoReferencia", "")
         aplicacoes = data.get("aplicacoes", [])
         if aplicacoes:
             potencia = aplicacoes[0].get("hp", "")
@@ -17,7 +17,7 @@ def tratar_dados(lista):
         tratados.append({
             "nome": nome.strip(),
             "marca": marca.strip(),
-            "id": id,
+            "codigoReferencia": codigo_referencia.strip(),
             "potencia": potencia,
             "ano_inicio": ano_inicio,
             "ano_fim": ano_fim
