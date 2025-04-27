@@ -1,3 +1,6 @@
+# Vou corrigir o app.py e permitir testes locais.
+# Ele buscará o produto correto usando POST para /produtos/query ao invés de GET por id.
+
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
@@ -18,13 +21,13 @@ autocomplete_bst = BST()
 produtos_tratados = []
 ultimo_prefixo = ""
 
-# Variáveis para novo fluxo de produto detalhado
+# Variáveis para novo fluxo
 produto_detalhado_bruto = None
 item_consumido = False
 similares_consumido = False
 timer_produto = None
 
-# =========================== Funções auxiliares ===========================
+# ======= Funções Auxiliares ========
 
 def obter_token():
     url_token = "https://sso-catalogo.redeancora.com.br/connect/token"
@@ -63,7 +66,7 @@ def iniciar_timer_expiracao():
     timer_produto = threading.Timer(30.0, expirar_produto)
     timer_produto.start()
 
-# =========================== Rotas principais ===========================
+# ======= Rotas principais ========
 
 @app.route("/")
 def home():
@@ -81,15 +84,9 @@ def buscar():
         return jsonify({"error": "Token inválido"}), 401
 
     url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "produtoFiltro": {"nomeProduto": termo},
-        "pagina": 0,
-        "itensPorPagina": 300
-    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {"produtoFiltro": {"nomeProduto": termo}, "pagina": 0, "itensPorPagina": 300}
+
     res = requests.post(url_api, headers=headers, json=payload)
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar produtos"}), 500
@@ -143,43 +140,48 @@ def autocomplete():
     sugestoes = autocomplete_bst.search_prefix(prefix)
     return jsonify({"sugestoes": sugestoes})
 
-# =========================== Novas rotas /produto /item /similares ===========================
+# ======= Corrigido /produto usando POST /query =======
 
 @app.route("/produto", methods=["GET"])
 def produto():
     global produto_detalhado_bruto, item_consumido, similares_consumido
 
     codigo_referencia = request.args.get("codigoReferencia", "").strip()
-    if not codigo_referencia:
-        return jsonify({"error": "Código de referência não informado"}), 400
+    nome_produto = request.args.get("nomeProduto", "").strip()
+
+    if not codigo_referencia or not nome_produto:
+        return jsonify({"error": "Código de referência e nome do produto são obrigatórios."}), 400
 
     token = obter_token()
     if not token:
         return jsonify({"error": "Token inválido"}), 401
 
-    url = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
+    # Mudando para POST na rota /produtos/query
+    url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
     payload = {
         "produtoFiltro": {
+            "nomeProduto": nome_produto,
             "codigoReferencia": codigo_referencia
         },
         "pagina": 0,
         "itensPorPagina": 1
     }
-    res = requests.post(url, headers=headers, json=payload)
+
+    res = requests.post(url_api, headers=headers, json=payload)
 
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar detalhe do produto"}), 500
 
-    lista_resultados = res.json().get("pageResult", {}).get("data", [])
-
-    if not lista_resultados:
+    dados = res.json().get("pageResult", {}).get("data", [])
+    if not dados:
         return jsonify({"error": "Produto não encontrado."}), 404
 
-    produto_detalhado_bruto = lista_resultados[0].get("data", {})
+    # Agora sim: salva o primeiro item encontrado
+    produto_detalhado_bruto = dados[0].get("data", {})
     item_consumido = False
     similares_consumido = False
     iniciar_timer_expiracao()
