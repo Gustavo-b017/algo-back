@@ -9,6 +9,7 @@ def processar_item(produto):
             "fabricacaoInicial": app_item.get("fabricacaoInicial"),
             "hp": app_item.get("hp"),
             "id": app_item.get("id"),
+            "linha": app_item.get("linha"),
             "modelo": app_item.get("modelo"),
             "montadora": app_item.get("montadora"),
             "versao": app_item.get("versao")
@@ -25,6 +26,7 @@ def processar_item(produto):
 
     return {
         "nomeProduto": produto.get("nomeProduto"),
+        "id": produto.get("id"),
         "marca": produto.get("marca"),
         "imagemReal": produto.get("imagemReal"),
         "logomarca": produto.get("logoMarca"),
