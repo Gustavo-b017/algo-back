@@ -151,12 +151,6 @@ def produto():
     if not codigo:
         return jsonify({"error": "Código de referência não informado"}), 400
 
-    # Verificar se o código existe nos produtos tratados
-    codigo_existe = any(produto.get("codigo") == codigo for produto in produtos_tratados)
-    if not codigo_existe:
-        return jsonify({"error": "Produto não encontrado."}), 404
-
-    # Se existir, busca na API externa
     token = obter_token()
     if not token:
         return jsonify({"error": "Token inválido"}), 401
@@ -165,9 +159,13 @@ def produto():
     headers = {"Authorization": f"Bearer {token}"}
     res = requests.get(url, headers=headers)
 
+    if res.status_code == 404:
+        return jsonify({"error": "Produto não encontrado."}), 404
+
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar detalhe do produto"}), 500
 
+    # Salva o dado bruto normalmente
     produto_detalhado_bruto = res.json().get("data", {})
     item_consumido = False
     similares_consumido = False
