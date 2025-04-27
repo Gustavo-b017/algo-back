@@ -144,35 +144,48 @@ def autocomplete():
     return jsonify({"sugestoes": sugestoes})
 
 # =========================== Novas rotas /produto /item /similares ===========================
- 
+
 @app.route("/produto", methods=["GET"])
 def produto():
     global produto_detalhado_bruto, item_consumido, similares_consumido
 
-    codigo = request.args.get("codigoReferencia", "").strip()
-    if not codigo:
-        return jsonify({"error": "ID do produto não informado"}), 400
+    codigo_referencia = request.args.get("codigoReferencia", "").strip()
+    if not codigo_referencia:
+        return jsonify({"error": "Código de referência não informado"}), 400
 
     token = obter_token()
     if not token:
         return jsonify({"error": "Token inválido"}), 401
 
-    url = f"https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/{codigo}"
-    headers = {"Authorization": f"Bearer {token}"}
-    res = requests.get(url, headers=headers)
-
-    if res.status_code == 404:
-        return jsonify({"error": "Produto não encontrado."}), 404
+    url = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "produtoFiltro": {
+            "codigoReferencia": codigo_referencia
+        },
+        "pagina": 0,
+        "itensPorPagina": 1
+    }
+    res = requests.post(url, headers=headers, json=payload)
 
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar detalhe do produto"}), 500
 
-    produto_detalhado_bruto = res.json().get("data", {})
+    lista_resultados = res.json().get("pageResult", {}).get("data", [])
+
+    if not lista_resultados:
+        return jsonify({"error": "Produto não encontrado."}), 404
+
+    produto_detalhado_bruto = lista_resultados[0].get("data", {})
     item_consumido = False
     similares_consumido = False
     iniciar_timer_expiracao()
 
     return jsonify({"mensagem": "Produto detalhado carregado."})
+
 
 @app.route("/item", methods=["GET"])
 def item():
