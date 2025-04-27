@@ -144,7 +144,7 @@ def autocomplete():
     return jsonify({"sugestoes": sugestoes})
 
 # =========================== Novas rotas /produto /item /similares ===========================
-
+ 
 @app.route("/produto", methods=["GET"])
 def produto():
     global produto_detalhado_bruto, item_consumido, similares_consumido
