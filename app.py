@@ -1,6 +1,3 @@
-# Vou corrigir o app.py e permitir testes locais.
-# Ele buscará o produto correto usando POST para /produtos/query ao invés de GET por id.
-
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests
@@ -21,13 +18,12 @@ autocomplete_bst = BST()
 produtos_tratados = []
 ultimo_prefixo = ""
 
-# Variáveis para novo fluxo
 produto_detalhado_bruto = None
 item_consumido = False
 similares_consumido = False
 timer_produto = None
 
-# ======= Funções Auxiliares ========
+# =========================== Funções auxiliares ===========================
 
 def obter_token():
     url_token = "https://sso-catalogo.redeancora.com.br/connect/token"
@@ -66,7 +62,7 @@ def iniciar_timer_expiracao():
     timer_produto = threading.Timer(30.0, expirar_produto)
     timer_produto.start()
 
-# ======= Rotas principais ========
+# =========================== Rotas principais ===========================
 
 @app.route("/")
 def home():
@@ -84,9 +80,15 @@ def buscar():
         return jsonify({"error": "Token inválido"}), 401
 
     url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload = {"produtoFiltro": {"nomeProduto": termo}, "pagina": 0, "itensPorPagina": 300}
-
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "produtoFiltro": {"nomeProduto": termo},
+        "pagina": 0,
+        "itensPorPagina": 300
+    }
     res = requests.post(url_api, headers=headers, json=payload)
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar produtos"}), 500
@@ -140,54 +142,58 @@ def autocomplete():
     sugestoes = autocomplete_bst.search_prefix(prefix)
     return jsonify({"sugestoes": sugestoes})
 
-# ======= Corrigido /produto usando POST /query =======
+# =========================== Nova rota /produto com nome, id e codigoReferencia ===========================
 
 @app.route("/produto", methods=["GET"])
 def produto():
     global produto_detalhado_bruto, item_consumido, similares_consumido
 
+    id_enviado = request.args.get("id", type=int)
     codigo_referencia = request.args.get("codigoReferencia", "").strip()
     nome_produto = request.args.get("nomeProduto", "").strip()
 
-    if not codigo_referencia or not nome_produto:
-        return jsonify({"error": "Código de referência e nome do produto são obrigatórios."}), 400
+    if not (id_enviado and codigo_referencia and nome_produto):
+        return jsonify({"error": "Parâmetros obrigatórios não enviados."}), 400
 
     token = obter_token()
     if not token:
         return jsonify({"error": "Token inválido"}), 401
 
-    # Mudando para POST na rota /produtos/query
     url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {
         "produtoFiltro": {
-            "nomeProduto": nome_produto,
-            "codigoReferencia": codigo_referencia
+            "nomeProduto": nome_produto.upper().strip(),
+            "codigoReferencia": codigo_referencia,
+            "id": id_enviado
         },
         "pagina": 0,
-        "itensPorPagina": 1
+        "itensPorPagina": 20
     }
 
     res = requests.post(url_api, headers=headers, json=payload)
-
     if res.status_code != 200:
-        return jsonify({"error": "Erro ao buscar detalhe do produto"}), 500
+        return jsonify({"error": "Erro ao consultar produtos"}), 500
 
-    dados = res.json().get("pageResult", {}).get("data", [])
-    if not dados:
+    produtos = res.json().get("pageResult", {}).get("data", [])
+
+    produto_correto = next(
+        (p for p in produtos
+            if p.get("data", {}).get("id") == id_enviado
+            and p.get("data", {}).get("codigoReferencia") == codigo_referencia
+            and p.get("data", {}).get("nomeProduto", "").strip().lower() == nome_produto.lower().strip()),
+        None
+    )
+
+    if not produto_correto:
         return jsonify({"error": "Produto não encontrado."}), 404
 
-    # Agora sim: salva o primeiro item encontrado
-    produto_detalhado_bruto = dados[0].get("data", {})
+    produto_detalhado_bruto = produto_correto.get("data", {})
     item_consumido = False
     similares_consumido = False
     iniciar_timer_expiracao()
 
     return jsonify({"mensagem": "Produto detalhado carregado."})
-
 
 @app.route("/item", methods=["GET"])
 def item():
