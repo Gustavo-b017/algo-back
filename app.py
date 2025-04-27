@@ -146,10 +146,17 @@ def autocomplete():
 @app.route("/produto", methods=["GET"])
 def produto():
     global produto_detalhado_bruto, item_consumido, similares_consumido
+
     codigo = request.args.get("codigoReferencia", "").strip()
     if not codigo:
         return jsonify({"error": "Código de referência não informado"}), 400
 
+    # Verificar se o código existe nos produtos tratados
+    codigo_existe = any(produto.get("codigo") == codigo for produto in produtos_tratados)
+    if not codigo_existe:
+        return jsonify({"error": "Produto não encontrado."}), 404
+
+    # Se existir, busca na API externa
     token = obter_token()
     if not token:
         return jsonify({"error": "Token inválido"}), 401
