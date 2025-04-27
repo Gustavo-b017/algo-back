@@ -11,7 +11,7 @@ from utils.processar_similares import processar_similares
 from flask_compress import Compress
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 Compress(app)
 
 autocomplete_bst = BST()
