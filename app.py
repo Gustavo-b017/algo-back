@@ -6,6 +6,8 @@ import threading
 from utils.bst import BST
 from utils.preprocess import tratar_dados
 from utils.sort import quick_sort
+from utils.processar_item import processar_item
+from utils.processar_similares import processar_similares
 from flask_compress import Compress
 
 app = Flask(__name__)
@@ -147,15 +149,15 @@ def autocomplete():
 def produto():
     global produto_detalhado_bruto, item_consumido, similares_consumido
 
-    codigo = request.args.get("codigoReferencia", "").strip()
-    if not codigo:
-        return jsonify({"error": "Código de referência não informado"}), 400
+    produto_id = request.args.get("id", "").strip()
+    if not produto_id:
+        return jsonify({"error": "ID do produto não informado"}), 400
 
     token = obter_token()
     if not token:
         return jsonify({"error": "Token inválido"}), 401
 
-    url = f"https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/{codigo}"
+    url = f"https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/{produto_id}"
     headers = {"Authorization": f"Bearer {token}"}
     res = requests.get(url, headers=headers)
 
@@ -165,7 +167,6 @@ def produto():
     if res.status_code != 200:
         return jsonify({"error": "Erro ao buscar detalhe do produto"}), 500
 
-    # Salva o dado bruto normalmente
     produto_detalhado_bruto = res.json().get("data", {})
     item_consumido = False
     similares_consumido = False
@@ -182,41 +183,8 @@ def item():
     item_consumido = True
     verificar_e_limpar_dados()
 
-    aplicacoes = []
-    for app_item in produto_detalhado_bruto.get("aplicacoes", []):
-        aplicacoes.append({
-            "carroceria": app_item.get("carroceria"),
-            "cilindros": app_item.get("cilindros"),
-            "combustivel": app_item.get("combustivel"),
-            "fabricacaoFinal": app_item.get("fabricacaoFinal"),
-            "fabricacaoInicial": app_item.get("fabricacaoInicial"),
-            "hp": app_item.get("hp"),
-            "id": app_item.get("id"),
-            "modelo": app_item.get("modelo"),
-            "montadora": app_item.get("montadora"),
-            "versao": app_item.get("versao")
-        })
-
-    aplicacoes_gerais = []
-    for geral in produto_detalhado_bruto.get("aplicacoesGerais", []):
-        aplicacoes_gerais.append({
-            "codigoReferencia": geral.get("codigoReferencia"),
-            "familia": geral.get("familia"),
-            "descricao": geral.get("descricao"),
-            "subFamilia": geral.get("subFamilia", {}).get("descricao")
-        })
-
-    produto = {
-        "nomeProduto": produto_detalhado_bruto.get("nomeProduto"),
-        "marca": produto_detalhado_bruto.get("marca"),
-        "imagemReal": produto_detalhado_bruto.get("imagemReal"),
-        "logomarca": produto_detalhado_bruto.get("logoMarca"),
-        "score": produto_detalhado_bruto.get("score"),
-        "aplicacoes": aplicacoes,
-        "aplicacoesGerais": aplicacoes_gerais
-    }
-
-    return jsonify(produto)
+    item_tratado = processar_item(produto_detalhado_bruto)
+    return jsonify(item_tratado)
 
 @app.route("/similares", methods=["GET"])
 def similares():
@@ -227,31 +195,8 @@ def similares():
     similares_consumido = True
     verificar_e_limpar_dados()
 
-    similares_data = []
-    for sim in produto_detalhado_bruto.get("similares", []):
-        similares_data.append({
-            "id": sim.get("id"),
-            "logoMarca": sim.get("logoMarca"),
-            "marca": sim.get("marca"),
-            "codigoReferencia": sim.get("codigoReferencia")
-        })
-
-    produtos_parcialmente_similares = []
-    for ps in produto_detalhado_bruto.get("produtosParcialmenteSimilares", []):
-        produtos_parcialmente_similares.append({
-            "codigoReferencia": ps.get("codigoReferencia"),
-            "marca": ps.get("marca"),
-            "nomeProduto": ps.get("nomeProduto")
-        })
-
-    similares = {
-        "similares": similares_data,
-        "produtosParcialmenteSimilares": produtos_parcialmente_similares,
-        "produtosSistemasFilhos": produto_detalhado_bruto.get("produtosSistemasFilhos", []),
-        "produtosSistemasPais": produto_detalhado_bruto.get("produtosSistemasPais", [])
-    }
-
-    return jsonify(similares)
+    similares_tratados = processar_similares(produto_detalhado_bruto)
+    return jsonify(similares_tratados)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
