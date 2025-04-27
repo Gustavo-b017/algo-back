@@ -214,9 +214,11 @@ def similares():
         return jsonify({"error": "Produto expirado, refaça a busca."}), 400
 
     similares_consumido = True
-    verificar_e_limpar_dados()
 
     similares_tratados = processar_similares(produto_detalhado_bruto)
+    
+    verificar_e_limpar_dados()
+    
     return jsonify(similares_tratados)
 
 if __name__ == "__main__":
