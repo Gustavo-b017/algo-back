@@ -12,7 +12,9 @@ def processar_item(produto):
             "linha": app_item.get("linha"),
             "modelo": app_item.get("modelo"),
             "montadora": app_item.get("montadora"),
-            "versao": app_item.get("versao")
+            "versao": app_item.get("versao"),
+            "geracao": app_item.get("geracao"),
+            "motor": app_item.get("motor")
         })
 
     aplicacoes_gerais = []
@@ -22,6 +24,13 @@ def processar_item(produto):
             "familia": geral.get("familia"),
             "descricao": geral.get("descricao"),
             "subFamilia": geral.get("subFamilia", {}).get("descricao")
+        })
+
+    familiaLista = []
+    for familia in produto.get("familia", []):
+        familiaLista.append({
+            "descricao": familia.get("descricao"),
+            "subFamilia": familia.get("subFamilia", {}).get("descricao"),
         })
 
     return {
