@@ -17,15 +17,6 @@ def processar_item(produto):
             "motor": app_item.get("motor")
         })
 
-    aplicacoes_gerais = []
-    for geral in produto.get("aplicacoesGerais", []):
-        aplicacoes_gerais.append({
-            "codigoReferencia": geral.get("codigoReferencia"),
-            "familia": geral.get("familia"),
-            "descricao": geral.get("descricao"),
-            "subFamilia": geral.get("subFamilia", {}).get("descricao")
-        })
-
     familiaLista = []
     for familia in produto.get("familia", []):
         familiaLista.append({
@@ -41,5 +32,5 @@ def processar_item(produto):
         "logomarca": produto.get("logoMarca"),
         "score": produto.get("score"),
         "aplicacoes": aplicacoes,
-        "aplicacoesGerais": aplicacoes_gerais
+        "familia": familiaLista,
     }
