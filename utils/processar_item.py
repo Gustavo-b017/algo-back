@@ -17,14 +17,14 @@ def processar_item(produto):
             "motor": app_item.get("motor")
         })
 
-    familiaArray = []
-    for fami in produto.get("familia", []):
-        familiaArray.append({
-            "codigoReferencia": fami.get("codigoReferencia"),
-            "familia": fami.get("familia"),
-            "descricao": fami.get("descricao"),
-            "subFamilia": fami.get("subFamilia", {}).get("descricao")
-        })
+    familia = produto.get("familia", {})
+    familia_obj = {}
+    if familia:
+        familia_obj = {
+            "descricao": familia.get("descricao"),
+            "id": familia.get("id"),
+            "subFamiliaDescricao": familia.get("subFamilia", {}).get("descricao")
+        }
 
     return {
         "nomeProduto": produto.get("nomeProduto"),
@@ -34,5 +34,5 @@ def processar_item(produto):
         "logomarca": produto.get("logoMarca"),
         "score": produto.get("score"),
         "aplicacoes": aplicacoes,
-        "familia": familiaArray
+        "familia": familia_obj
     }
