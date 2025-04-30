@@ -3,7 +3,7 @@ from flask_cors import CORS
 import requests
 import os
 import threading
-from utils.bst import BST
+from utils.autocomplete_adaptativo import AutocompleteAdaptativo
 from utils.preprocess import tratar_dados
 from utils.sort import quick_sort
 from utils.processar_item import processar_item
@@ -14,7 +14,7 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 Compress(app)
 
-autocomplete_bst = BST()
+autocomplete_engine = AutocompleteAdaptativo()
 produtos_tratados = []
 ultimo_prefixo = ""
 
@@ -95,6 +95,7 @@ def buscar():
 
     produtos_brutos = res.json().get("pageResult", {}).get("data", [])
     produtos_tratados = tratar_dados(produtos_brutos)
+    autocomplete_engine.build(produtos_tratados, termo)
     return jsonify({"mensagem": "Produtos tratados atualizados."})
 
 @app.route("/tratados", methods=["GET"])
@@ -128,21 +129,11 @@ def tratados():
 
 @app.route("/autocomplete", methods=["GET"])
 def autocomplete():
-    global ultimo_prefixo, autocomplete_bst
     prefix = request.args.get("prefix", "").strip().lower()
     if not prefix:
         return jsonify({"sugestoes": []})
-
-    if prefix != ultimo_prefixo:
-        nomes = [p['nome'] for p in produtos_tratados if p.get('nome')]
-        autocomplete_bst = BST()
-        autocomplete_bst.build_balanced(nomes)
-        ultimo_prefixo = prefix
-
-    sugestoes = autocomplete_bst.search_prefix(prefix)
+    sugestoes = autocomplete_engine.search(prefix)
     return jsonify({"sugestoes": sugestoes})
-
-# =========================== Nova rota /produto com nome, id e codigoReferencia ===========================
 
 @app.route("/produto", methods=["GET"])
 def produto():
@@ -214,11 +205,8 @@ def similares():
         return jsonify({"error": "Produto expirado, refaça a busca."}), 400
 
     similares_consumido = True
-
     similares_tratados = processar_similares(produto_detalhado_bruto)
-    
     verificar_e_limpar_dados()
-    
     return jsonify(similares_tratados)
 
 if __name__ == "__main__":
