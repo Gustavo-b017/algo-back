@@ -5,7 +5,7 @@ import os
 import threading
 from utils.autocomplete_adaptativo import AutocompleteAdaptativo
 from utils.preprocess import tratar_dados
-from utils.sort import quick_sort
+from utils.sort import ordenar_produtos
 from utils.processar_item import processar_item
 from utils.processar_similares import processar_similares
 from flask_compress import Compress
@@ -79,23 +79,58 @@ def buscar():
     if not token:
         return jsonify({"error": "Token inválido"}), 401
 
-    url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-    payload = {
+
+    # 1. Consulta principal
+    url_nome = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
+    payload_nome = {
         "produtoFiltro": {"nomeProduto": termo},
         "pagina": 0,
         "itensPorPagina": 300
     }
-    res = requests.post(url_api, headers=headers, json=payload)
-    if res.status_code != 200:
+    res_nome = requests.post(url_nome, headers=headers, json=payload_nome)
+    if res_nome.status_code != 200:
         return jsonify({"error": "Erro ao buscar produtos"}), 500
 
-    produtos_brutos = res.json().get("pageResult", {}).get("data", [])
+    produtos_brutos = res_nome.json().get("pageResult", {}).get("data", [])
     produtos_tratados = tratar_dados(produtos_brutos)
+
+    # 2. Consulta complementar (superbusca)
+    url_super = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/v2/produtos/query/sumario"
+    payload_super = {
+        "veiculoFiltro": {},
+        "superbusca": termo,
+        "pagina": 0,
+        "itensPorPagina": 100
+    }
+    res_super = requests.post(url_super, headers=headers, json=payload_super)
+    produtos_super = []
+    if res_super.status_code == 200:
+        produtos_super = res_super.json().get("pageResult", {}).get("data", [])
+
+    # 3. Extrair termos extras do superbusca (para autocomplete apenas)
+    termos_extras = set()
+    for p in produtos_super:
+        data = p.get("data", {})
+        nome = data.get("nomeProduto", "").strip().lower()
+        codigo = data.get("codigoReferencia", "").strip().lower()
+        marca = data.get("marca", "").strip().lower()
+        if nome:
+            termos_extras.add(nome)
+            termos_extras.update(nome.split())
+        if codigo:
+            termos_extras.add(codigo)
+        if marca:
+            termos_extras.add(marca)
+
+    # 4. Atualizar autocomplete com produtos tratados + extras
     autocomplete_engine.build(produtos_tratados, termo)
+    for termo_extra in termos_extras:
+        autocomplete_engine.build([], termo_extra)
+
     return jsonify({"mensagem": "Produtos tratados atualizados."})
 
 @app.route("/tratados", methods=["GET"])
@@ -111,7 +146,7 @@ def tratados():
     if marca:
         resultados = [p for p in resultados if p.get("marca", "").lower() == marca]
 
-    resultados = quick_sort(resultados, asc=ordem, key_func=lambda x: x.get('nome', '').lower())
+    resultados = ordenar_produtos(resultados, asc=ordem, key_func=lambda x: x.get('nome', '').lower())
     total_itens = len(resultados)
     total_paginas = (total_itens + itens_por_pagina - 1) // itens_por_pagina
 
