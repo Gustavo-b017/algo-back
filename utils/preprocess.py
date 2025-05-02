@@ -1,29 +1,10 @@
 def tratar_dados(lista):
-    tratados = []
-    for item in lista:
-        data = item.get("data", {})
-        nome = data.get("nomeProduto", "")
-        marca = data.get("marca", "")
-        id = data.get("id", "")
-        codigo_referencia = data.get("codigoReferencia", "")
-        aplicacoes = data.get("aplicacoes", [])
-        if aplicacoes:
-            potencia = aplicacoes[0].get("hp", "")
-            ano_inicio = aplicacoes[0].get("fabricacaoInicial", "")
-            ano_fim = aplicacoes[0].get("fabricacaoFinal", "")
-        
-        else:
-            potencia = ""
-            ano_inicio = ""
-            ano_fim = ""
-
-        tratados.append({
-            "nome": nome.strip(),
-            "marca": marca.strip(),
-            "codigoReferencia": codigo_referencia.strip(),
-            "potencia": potencia,
-            "id": id,
-            "ano_inicio": ano_inicio,
-            "ano_fim": ano_fim
-        })
-    return tratados
+    return [{
+        "nome": item.get("data", {}).get("nomeProduto", "").strip(),
+        "marca": item.get("data", {}).get("marca", "").strip(),
+        "codigoReferencia": item.get("data", {}).get("codigoReferencia", "").strip(),
+        "potencia": item.get("data", {}).get("aplicacoes", [{}])[0].get("hp", "") if item.get("data", {}).get("aplicacoes") else "",
+        "ano_inicio": item.get("data", {}).get("aplicacoes", [{}])[0].get("fabricacaoInicial", "") if item.get("data", {}).get("aplicacoes") else "",
+        "ano_fim": item.get("data", {}).get("aplicacoes", [{}])[0].get("fabricacaoFinal", "") if item.get("data", {}).get("aplicacoes") else "",
+        "id": item.get("data", {}).get("id", "")
+    } for item in lista]

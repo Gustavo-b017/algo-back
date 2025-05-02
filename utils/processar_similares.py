@@ -1,20 +1,16 @@
 def processar_similares(produto):
-    similares_data = []
-    for sim in produto.get("similares", []):
-        similares_data.append({
-            "id": sim.get("id"),
-            "logoMarca": sim.get("logoMarca"),
-            "marca": sim.get("marca"),
-            "codigoReferencia": sim.get("codigoReferencia")
-        })
+    similares_data = [{
+        "id": sim.get("id"),
+        "logoMarca": sim.get("logoMarca"),
+        "marca": sim.get("marca"),
+        "codigoReferencia": sim.get("codigoReferencia")
+    } for sim in produto.get("similares", [])]
 
-    produtos_parcialmente_similares = []
-    for ps in produto.get("produtosParcialmenteSimilares", []):
-        produtos_parcialmente_similares.append({
-            "codigoReferencia": ps.get("codigoReferencia"),
-            "marca": ps.get("marca"),
-            "nomeProduto": ps.get("nomeProduto")
-        })
+    produtos_parcialmente_similares = [{
+        "codigoReferencia": ps.get("codigoReferencia"),
+        "marca": ps.get("marca"),
+        "nomeProduto": ps.get("nomeProduto")
+    } for ps in produto.get("produtosParcialmenteSimilares", [])]
 
     return {
         "similares": similares_data,

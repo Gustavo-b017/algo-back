@@ -1,5 +1,5 @@
-import difflib
 from collections import deque
+from Levenshtein import distance as levenshtein_distance  # Requer: pip install python-Levenshtein
 
 class AutocompleteTrieNode:
     def __init__(self):
@@ -56,13 +56,12 @@ class AutocompleteAdaptativo:
     def __init__(self):
         self.trie = AutocompleteTrie()
         self.substrings = set()
-        self.prefixos_utilizados = deque(maxlen=3)
+        self.prefixos_utilizados = deque(maxlen=4)
         self.termo_mais_recente = ""
 
     def _prefixo_similar(self, novo_prefixo):
         for antigo in self.prefixos_utilizados:
-            ratio = difflib.SequenceMatcher(None, novo_prefixo, antigo).ratio()
-            if ratio > 0.6:
+            if levenshtein_distance(novo_prefixo, antigo) <= 2:
                 return True
         return False
 
@@ -73,13 +72,12 @@ class AutocompleteAdaptativo:
             codigo = p.get('codigoReferencia', '').strip().lower()
             marca = p.get('marca', '').strip().lower()
 
-            # evitar nomes compostos absurdamente repetitivos
             if nome and len(nome.split()) > 1 and nome.count(nome.split()[0]) > 1:
                 continue
 
             if nome:
                 termos.add(nome)
-                termos.update(nome.split())
+                termos.update(w for w in nome.split() if w)
             if codigo:
                 termos.add(codigo)
             if marca:
@@ -89,12 +87,15 @@ class AutocompleteAdaptativo:
             if not self._prefixo_similar(novo_prefixo):
                 self.prefixos_utilizados.append(novo_prefixo)
                 self.termo_mais_recente = novo_prefixo
-            if len(self.prefixos_utilizados) == 3:
+            if len(self.prefixos_utilizados) >= 4:
                 self.trie.clear()
                 self.prefixos_utilizados.clear()
                 self.prefixos_utilizados.append(self.termo_mais_recente)
+                self.trie.build(termos)
+            else:
+                for termo in termos:
+                    self.trie.insert(termo)
 
-        self.trie.build(termos)
         self.substrings.update(termos)
 
     def search(self, prefix):

@@ -3,3 +3,4 @@ flask
 flask-compress
 flask-cors
 requests
+python-Levenshtein

@@ -1,30 +1,26 @@
 def processar_item(produto):
-    aplicacoes = []
-    for app_item in produto.get("aplicacoes", []):
-        aplicacoes.append({
-            "carroceria": app_item.get("carroceria"),
-            "cilindros": app_item.get("cilindros"),
-            "combustivel": app_item.get("combustivel"),
-            "fabricacaoFinal": app_item.get("fabricacaoFinal"),
-            "fabricacaoInicial": app_item.get("fabricacaoInicial"),
-            "hp": app_item.get("hp"),
-            "id": app_item.get("id"),
-            "linha": app_item.get("linha"),
-            "modelo": app_item.get("modelo"),
-            "montadora": app_item.get("montadora"),
-            "versao": app_item.get("versao"),
-            "geracao": app_item.get("geracao"),
-            "motor": app_item.get("motor")
-        })
+    aplicacoes = [{
+        "carroceria": app.get("carroceria"),
+        "cilindros": app.get("cilindros"),
+        "combustivel": app.get("combustivel"),
+        "fabricacaoFinal": app.get("fabricacaoFinal"),
+        "fabricacaoInicial": app.get("fabricacaoInicial"),
+        "hp": app.get("hp"),
+        "id": app.get("id"),
+        "linha": app.get("linha"),
+        "modelo": app.get("modelo"),
+        "montadora": app.get("montadora"),
+        "versao": app.get("versao"),
+        "geracao": app.get("geracao"),
+        "motor": app.get("motor")
+    } for app in produto.get("aplicacoes", [])]
 
     familia = produto.get("familia", {})
-    familia_obj = {}
-    if familia:
-        familia_obj = {
-            "descricao": familia.get("descricao"),
-            "id": familia.get("id"),
-            "subFamiliaDescricao": familia.get("subFamilia", {}).get("descricao")
-        }
+    familia_obj = {
+        "descricao": familia.get("descricao"),
+        "id": familia.get("id"),
+        "subFamiliaDescricao": familia.get("subFamilia", {}).get("descricao")
+    } if familia else {}
 
     return {
         "nomeProduto": produto.get("nomeProduto"),

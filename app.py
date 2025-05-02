@@ -9,24 +9,21 @@ from utils.sort import ordenar_produtos
 from utils.processar_item import processar_item
 from utils.processar_similares import processar_similares
 from flask_compress import Compress
-from utils.token_manager import require_token
+from utils.token_manager import require_token, obter_token
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 Compress(app)
 
 autocomplete_engine = AutocompleteAdaptativo()
-produtos_tratados = []
-produtos_reserva = []
+produtos_buffer = []
+termo_buffer = ""
 contador_buscas = 0
-ultimo_prefixo = ""
 
 produto_detalhado_bruto = None
 item_consumido = False
 similares_consumido = False
 timer_produto = None
-
-# =========================== Funções auxiliares ===========================
 
 def verificar_e_limpar_dados():
     global produto_detalhado_bruto, item_consumido, similares_consumido, timer_produto
@@ -52,16 +49,16 @@ def iniciar_timer_expiracao():
     timer_produto = threading.Timer(30.0, expirar_produto)
     timer_produto.start()
 
-# =========================== Rotas principais ===========================
-
 @app.route("/")
 def home():
     return "API ativa. Rotas: /buscar, /tratados, /autocomplete, /produto, /item, /similares"
 
+# Trecho corrigido da função buscar (substituir apenas essa parte)
+
 @app.route("/buscar", methods=["GET"])
 @require_token
 def buscar():
-    global produtos_tratados, produtos_reserva, contador_buscas, ultimo_prefixo
+    global produtos_buffer, contador_buscas, termo_buffer
     termo = request.args.get("produto", "").strip().lower()
     if not termo:
         return jsonify({"error": "Produto não informado"}), 400
@@ -111,28 +108,26 @@ def buscar():
         if marca:
             termos_extras.add(marca)
 
-    autocomplete_engine.build(produtos_tratados, termo)
-    for termo_extra in termos_extras:
-        autocomplete_engine.build([], termo_extra)
+    if termo != termo_buffer:
+        autocomplete_engine.build(produtos_tratados, termo)
+        for termo_extra in termos_extras:
+            autocomplete_engine.build([], termo_extra)
+        termo_buffer = termo
 
-    contador_buscas += 1
-    if contador_buscas >= 3:
-        produtos_reserva = produtos_tratados.copy()
-        contador_buscas = 0
-
-    ultimo_prefixo = termo
+    produtos_buffer = produtos_tratados.copy()
+    contador_buscas = (contador_buscas + 1) % 3
 
     return jsonify({"mensagem": "Produtos tratados atualizados."})
 
 @app.route("/tratados", methods=["GET"])
 def tratados():
-    global produtos_tratados, produtos_reserva
+    global produtos_buffer
     marca = request.args.get("marca", "").strip().lower()
     ordem = request.args.get("ordem", "asc").strip().lower() == "asc"
     pagina = int(request.args.get("pagina", 1))
     itens_por_pagina = 15
 
-    resultados = produtos_tratados
+    resultados = produtos_buffer
     marcas_unicas = sorted(set(p.get("marca", "") for p in resultados if p.get("marca")))
 
     if marca:
@@ -145,11 +140,6 @@ def tratados():
     inicio = (pagina - 1) * itens_por_pagina
     fim = inicio + itens_por_pagina
     dados_paginados = resultados[inicio:fim]
-
-    if produtos_reserva:
-        produtos_tratados.clear()
-        produtos_tratados.extend(produtos_reserva)
-        produtos_reserva.clear()
 
     return jsonify({
         "marcas": marcas_unicas,
