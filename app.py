@@ -9,6 +9,7 @@ from utils.sort import ordenar_produtos
 from utils.processar_item import processar_item
 from utils.processar_similares import processar_similares
 from flask_compress import Compress
+from utils.token_manager import require_token
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -16,6 +17,8 @@ Compress(app)
 
 autocomplete_engine = AutocompleteAdaptativo()
 produtos_tratados = []
+produtos_reserva = []
+contador_buscas = 0
 ultimo_prefixo = ""
 
 produto_detalhado_bruto = None
@@ -24,19 +27,6 @@ similares_consumido = False
 timer_produto = None
 
 # =========================== Funções auxiliares ===========================
-
-def obter_token():
-    url_token = "https://sso-catalogo.redeancora.com.br/connect/token"
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    data = {
-        "grant_type": "client_credentials",
-        "client_id": "65tvh6rvn4d7uer3hqqm2p8k2pvnm5wx",
-        "client_secret": "9Gt2dBRFTUgunSeRPqEFxwNgAfjNUPLP5EBvXKCn"
-    }
-    res = requests.post(url_token, headers=headers, data=data)
-    if res.status_code == 200:
-        return res.json().get("access_token")
-    return None
 
 def verificar_e_limpar_dados():
     global produto_detalhado_bruto, item_consumido, similares_consumido, timer_produto
@@ -69,22 +59,19 @@ def home():
     return "API ativa. Rotas: /buscar, /tratados, /autocomplete, /produto, /item, /similares"
 
 @app.route("/buscar", methods=["GET"])
+@require_token
 def buscar():
-    global produtos_tratados
+    global produtos_tratados, produtos_reserva, contador_buscas, ultimo_prefixo
     termo = request.args.get("produto", "").strip().lower()
     if not termo:
         return jsonify({"error": "Produto não informado"}), 400
 
-    token = obter_token()
-    if not token:
-        return jsonify({"error": "Token inválido"}), 401
-
+    token = request.token
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 
-    # 1. Consulta principal
     url_nome = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
     payload_nome = {
         "produtoFiltro": {"nomeProduto": termo},
@@ -98,7 +85,6 @@ def buscar():
     produtos_brutos = res_nome.json().get("pageResult", {}).get("data", [])
     produtos_tratados = tratar_dados(produtos_brutos)
 
-    # 2. Consulta complementar (superbusca)
     url_super = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/v2/produtos/query/sumario"
     payload_super = {
         "veiculoFiltro": {},
@@ -111,7 +97,6 @@ def buscar():
     if res_super.status_code == 200:
         produtos_super = res_super.json().get("pageResult", {}).get("data", [])
 
-    # 3. Extrair termos extras do superbusca (para autocomplete apenas)
     termos_extras = set()
     for p in produtos_super:
         data = p.get("data", {})
@@ -126,15 +111,22 @@ def buscar():
         if marca:
             termos_extras.add(marca)
 
-    # 4. Atualizar autocomplete com produtos tratados + extras
     autocomplete_engine.build(produtos_tratados, termo)
     for termo_extra in termos_extras:
         autocomplete_engine.build([], termo_extra)
+
+    contador_buscas += 1
+    if contador_buscas >= 3:
+        produtos_reserva = produtos_tratados.copy()
+        contador_buscas = 0
+
+    ultimo_prefixo = termo
 
     return jsonify({"mensagem": "Produtos tratados atualizados."})
 
 @app.route("/tratados", methods=["GET"])
 def tratados():
+    global produtos_tratados, produtos_reserva
     marca = request.args.get("marca", "").strip().lower()
     ordem = request.args.get("ordem", "asc").strip().lower() == "asc"
     pagina = int(request.args.get("pagina", 1))
@@ -154,6 +146,11 @@ def tratados():
     fim = inicio + itens_por_pagina
     dados_paginados = resultados[inicio:fim]
 
+    if produtos_reserva:
+        produtos_tratados.clear()
+        produtos_tratados.extend(produtos_reserva)
+        produtos_reserva.clear()
+
     return jsonify({
         "marcas": marcas_unicas,
         "dados": dados_paginados,
@@ -171,6 +168,7 @@ def autocomplete():
     return jsonify({"sugestoes": sugestoes})
 
 @app.route("/produto", methods=["GET"])
+@require_token
 def produto():
     global produto_detalhado_bruto, item_consumido, similares_consumido
 
@@ -181,10 +179,7 @@ def produto():
     if not (id_enviado and codigo_referencia and nome_produto):
         return jsonify({"error": "Parâmetros obrigatórios não enviados."}), 400
 
-    token = obter_token()
-    if not token:
-        return jsonify({"error": "Token inválido"}), 401
-
+    token = request.token
     url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     payload = {

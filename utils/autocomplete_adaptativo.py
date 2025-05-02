@@ -1,4 +1,5 @@
 import difflib
+from collections import deque
 
 class AutocompleteTrieNode:
     def __init__(self):
@@ -55,7 +56,8 @@ class AutocompleteAdaptativo:
     def __init__(self):
         self.trie = AutocompleteTrie()
         self.substrings = set()
-        self.prefixos_utilizados = []
+        self.prefixos_utilizados = deque(maxlen=3)
+        self.termo_mais_recente = ""
 
     def _prefixo_similar(self, novo_prefixo):
         for antigo in self.prefixos_utilizados:
@@ -71,6 +73,10 @@ class AutocompleteAdaptativo:
             codigo = p.get('codigoReferencia', '').strip().lower()
             marca = p.get('marca', '').strip().lower()
 
+            # evitar nomes compostos absurdamente repetitivos
+            if nome and len(nome.split()) > 1 and nome.count(nome.split()[0]) > 1:
+                continue
+
             if nome:
                 termos.add(nome)
                 termos.update(nome.split())
@@ -79,16 +85,16 @@ class AutocompleteAdaptativo:
             if marca:
                 termos.add(marca)
 
-        # se prefixo for diferente dos já usados, registrar
         if novo_prefixo:
             if not self._prefixo_similar(novo_prefixo):
                 self.prefixos_utilizados.append(novo_prefixo)
-            if len(self.prefixos_utilizados) > 3:
+                self.termo_mais_recente = novo_prefixo
+            if len(self.prefixos_utilizados) == 3:
                 self.trie.clear()
-                self.prefixos_utilizados = [novo_prefixo]
+                self.prefixos_utilizados.clear()
+                self.prefixos_utilizados.append(self.termo_mais_recente)
 
-        for termo in termos:
-            self.trie.insert(termo)
+        self.trie.build(termos)
         self.substrings.update(termos)
 
     def search(self, prefix):

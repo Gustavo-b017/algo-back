@@ -1,0 +1,44 @@
+[
+  {
+    "nome": "Loja Bela Vista",
+    "endereco": "Rua Bela Cintra, 500 - Bela Vista, São Paulo - SP",
+    "lat": -23.556736,
+    "lon": -46.657116
+  },
+  {
+    "nome": "Loja Consolação",
+    "endereco": "Rua da Consolação, 2000 - Consolação, São Paulo - SP",
+    "lat": -23.555511,
+    "lon": -46.661255
+  },
+  {
+    "nome": "Loja Augusta",
+    "endereco": "Rua Augusta, 1500 - Cerqueira César, São Paulo - SP",
+    "lat": -23.554184,
+    "lon": -46.660116
+  },
+  {
+    "nome": "Loja Vergueiro",
+    "endereco": "Av. Vergueiro, 1000 - Liberdade, São Paulo - SP",
+    "lat": -23.570012,
+    "lon": -46.640228
+  },
+  {
+    "nome": "Loja Paraíso",
+    "endereco": "Rua Apeninos, 950 - Paraíso, São Paulo - SP",
+    "lat": -23.574097,
+    "lon": -46.640757
+  },
+  {
+    "nome": "Loja Brigadeiro",
+    "endereco": "Av. Brigadeiro Luís Antônio, 2000 - Bela Vista, São Paulo - SP",
+    "lat": -23.564953,
+    "lon": -46.647019
+  },
+  {
+    "nome": "Loja Liberdade",
+    "endereco": "Rua Galvão Bueno, 500 - Liberdade, São Paulo - SP",
+    "lat": -23.558163,
+    "lon": -46.635075
+  }
+]
