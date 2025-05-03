@@ -11,6 +11,7 @@ from utils.processar_similares import processar_similares
 from flask_compress import Compress
 from utils.token_manager import require_token, obter_token
 from utils.lojas import obter_melhor_rota
+from utils.entrega import calcular_rota_entregas
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -250,6 +251,11 @@ def lojas():
     except Exception as e:
         print("[/lojas] Erro:", e)
         return jsonify({"error": str(e)}), 500
+
+@app.route("/rota-entrega", methods=["GET"])
+def rota_entrega():
+    resultado = calcular_rota_entregas()
+    return jsonify(resultado)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

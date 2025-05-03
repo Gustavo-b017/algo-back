@@ -1,0 +1,62 @@
+[
+  {
+    "nome": "Auto Center Paulista",
+    "endereco": "Av. Paulista, 1000",
+    "lat": -23.561,
+    "lon": -46.654
+  },
+  {
+    "nome": "Consolação Motors",
+    "endereco": "Rua da Consolação, 1500",
+    "lat": -23.556,
+    "lon": -46.66
+  },
+  {
+    "nome": "Oficina Augusta Prime",
+    "endereco": "Rua Augusta, 1800",
+    "lat": -23.554,
+    "lon": -46.661
+  },
+  {
+    "nome": "Angélica Auto Repair",
+    "endereco": "Av. Angélica, 1900",
+    "lat": -23.55,
+    "lon": -46.655
+  },
+  {
+    "nome": "Haddock Garage",
+    "endereco": "Rua Haddock Lobo, 1200",
+    "lat": -23.56,
+    "lon": -46.662
+  },
+  {
+    "nome": "Frei Caneca Car",
+    "endereco": "Rua Frei Caneca, 500",
+    "lat": -23.551,
+    "lon": -46.648
+  },
+  {
+    "nome": "Bela Cintra Auto Center",
+    "endereco": "Rua Bela Cintra, 1200",
+    "lat": -23.555,
+    "lon": -46.652
+  },
+  {
+    "nome": "Pamplona Pneus",
+    "endereco": "Rua Pamplona, 1500",
+    "lat": -23.565,
+    "lon": -46.648
+  },
+  {
+    "nome": "Carlos Sampaio Mecânica",
+    "endereco": "Rua Carlos Sampaio, 400",
+    "lat": -23.565,
+    "lon": -46.644
+  },
+  {
+    "nome": "Bernardino Auto Service",
+    "endereco": "Av. Bernardino de Campos, 300",
+    "lat": -23.574,
+    "lon": -46.64
+  }
+]
