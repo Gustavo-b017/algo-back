@@ -190,7 +190,8 @@ def produto():
     produto_detalhado_bruto = produto_correto.get("data", {})
     item_consumido = similares_consumido = componentes_consumido = False
     iniciar_expiracao()
-    return jsonify({"mensagem": "Produto detalhado carregado."})
+    # return jsonify({"mensagem": "Produto detalhado carregado."})
+    return produto_detalhado_bruto
 
 @app.route("/item", methods=["GET"])
 def item():
@@ -209,35 +210,6 @@ def similares():
         return erro("Produto expirado, refaça a busca.", 400)
     similares_consumido = True
     response = jsonify(processar_similares(produto_detalhado_bruto))
-    verificar_e_limpar_dados()
-    return response
-
-@app.route("/componentes-filhos", methods=["GET"])
-@require_token
-def componentes_filhos():
-    global produto_detalhado_bruto, componentes_consumido
-    token = request.token
-    headers = headers_com_token(token)
-
-    if produto_detalhado_bruto and not is_produto_expirado():
-        filhos = produto_detalhado_bruto.get("produtosSistemasFilhos", [])
-    else:
-        codigo = request.args.get("codigoReferencia", "").strip()
-        if not codigo:
-            return erro("Parâmetro 'codigoReferencia' é obrigatório.")
-        payload = {
-            "produtoFiltro": {"codigoReferencia": codigo},
-            "pagina": 0,
-            "itensPorPagina": 100
-        }
-        url = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/v2/produtos-filhos/query"
-        res = session.post(url, headers=headers, json=payload)
-        if res.status_code != 200:
-            return erro("Erro ao consultar componentes filhos", 500)
-        filhos = res.json().get("pageResult", {}).get("data", [])
-
-    componentes_consumido = True
-    response = jsonify(filhos)
     verificar_e_limpar_dados()
     return response
 
