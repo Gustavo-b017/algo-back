@@ -14,9 +14,9 @@ from utils.lojas import obter_melhor_rota
 from utils.entrega import calcular_rota_entregas
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
-Compress(app)
+CORS(app)
 
+Compress(app)
 session = requests.Session()
 
 def headers_com_token(token):
@@ -39,18 +39,12 @@ produtos_buffer = []
 termo_buffer = ""
 contador_buscas = 0
 
+# Buffer global de produto detalhado
 produto_detalhado_bruto = None
 item_consumido = False
 similares_consumido = False
+componentes_consumido = False
 produto_expira_em = None
-
-def verificar_e_limpar_dados():
-    global produto_detalhado_bruto, item_consumido, similares_consumido, produto_expira_em
-    if item_consumido and similares_consumido:
-        produto_detalhado_bruto = None
-        item_consumido = False
-        similares_consumido = False
-        produto_expira_em = None
 
 def is_produto_expirado():
     global produto_expira_em
@@ -60,9 +54,18 @@ def iniciar_expiracao():
     global produto_expira_em
     produto_expira_em = datetime.utcnow() + timedelta(seconds=30)
 
+def verificar_e_limpar_dados():
+    global produto_detalhado_bruto, item_consumido, similares_consumido, componentes_consumido, produto_expira_em
+    if item_consumido and similares_consumido and componentes_consumido and is_produto_expirado():
+        produto_detalhado_bruto = None
+        item_consumido = False
+        similares_consumido = False
+        componentes_consumido = False
+        produto_expira_em = None
+
 @app.route("/")
 def home():
-    return "API ativa. Rotas: /buscar, /tratados, /autocomplete, /produto, /item, /similares"
+    return "API ativa. Rotas: /buscar, /tratados, /autocomplete, /produto, /item, /similares, /componentes-filhos"
 
 @app.route("/buscar", methods=["GET"])
 @require_token
@@ -96,23 +99,14 @@ def buscar():
         "itensPorPagina": 100
     }
     res_super = session.post(url_super, headers=headers, json=payload_super)
-    produtos_super = []
-    if res_super.status_code == 200:
-        produtos_super = res_super.json().get("pageResult", {}).get("data", [])
+    produtos_super = res_super.json().get("pageResult", {}).get("data", []) if res_super.status_code == 200 else []
 
     termos_extras = set()
     for p in produtos_super:
         data = p.get("data", {})
-        nome = data.get("nomeProduto", "").strip().lower()
-        codigo = data.get("codigoReferencia", "").strip().lower()
-        marca = data.get("marca", "").strip().lower()
-        if nome:
-            termos_extras.add(nome)
-            termos_extras.update(nome.split())
-        if codigo:
-            termos_extras.add(codigo)
-        if marca:
-            termos_extras.add(marca)
+        termos_extras.update(data.get("nomeProduto", "").strip().lower().split())
+        termos_extras.add(data.get("codigoReferencia", "").strip().lower())
+        termos_extras.add(data.get("marca", "").strip().lower())
 
     if termo != termo_buffer:
         autocomplete_engine.build(produtos_tratados, termo)
@@ -134,8 +128,6 @@ def tratados():
     itens_por_pagina = 15
 
     resultados = produtos_buffer
-    marcas_unicas = sorted(set(p.get("marca", "") for p in resultados if p.get("marca")))
-
     if marca:
         resultados = [p for p in resultados if p.get("marca", "").lower() == marca]
 
@@ -145,11 +137,10 @@ def tratados():
 
     inicio = (pagina - 1) * itens_por_pagina
     fim = inicio + itens_por_pagina
-    dados_paginados = resultados[inicio:fim]
 
     return jsonify({
-        "marcas": marcas_unicas,
-        "dados": dados_paginados,
+        "marcas": sorted(set(p.get("marca", "") for p in produtos_buffer if p.get("marca"))),
+        "dados": resultados[inicio:fim],
         "pagina": pagina,
         "total_paginas": total_paginas,
         "proxima_pagina": pagina < total_paginas
@@ -158,29 +149,21 @@ def tratados():
 @app.route("/autocomplete", methods=["GET"])
 def autocomplete():
     prefix = request.args.get("prefix", "").strip().lower()
-    if not prefix:
-        return jsonify({"sugestoes": []})
-    sugestoes = autocomplete_engine.search(prefix)
-    return jsonify({"sugestoes": sugestoes})
+    return jsonify({"sugestoes": autocomplete_engine.search(prefix) if prefix else []})
 
 @app.route("/produto", methods=["GET"])
 @require_token
 def produto():
-    global produto_detalhado_bruto, item_consumido, similares_consumido
+    global produto_detalhado_bruto, item_consumido, similares_consumido, componentes_consumido
     id_enviado = request.args.get("id", type=int)
     codigo_referencia = request.args.get("codigoReferencia", "").strip()
     nome_produto = request.args.get("nomeProduto", "").strip()
 
-    val = obrigatorios({
-        "id": id_enviado,
-        "codigoReferencia": codigo_referencia,
-        "nomeProduto": nome_produto
-    })
+    val = obrigatorios({"id": id_enviado, "codigoReferencia": codigo_referencia, "nomeProduto": nome_produto})
     if val: return val
 
     token = request.token
     headers = headers_com_token(token)
-    url_api = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
     payload = {
         "produtoFiltro": {
             "nomeProduto": nome_produto.upper().strip(),
@@ -190,51 +173,45 @@ def produto():
         "pagina": 0,
         "itensPorPagina": 20
     }
-
-    res = session.post(url_api, headers=headers, json=payload)
+    res = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload)
     if res.status_code != 200:
         return erro("Erro ao consultar produtos", 500)
 
     produtos = res.json().get("pageResult", {}).get("data", [])
     produto_correto = next(
-        (p for p in produtos
-            if p.get("data", {}).get("id") == id_enviado
-            and p.get("data", {}).get("codigoReferencia") == codigo_referencia
-            and p.get("data", {}).get("nomeProduto", "").strip().lower() == nome_produto.lower().strip()),
+        (p for p in produtos if p.get("data", {}).get("id") == id_enviado and
+         p.get("data", {}).get("codigoReferencia") == codigo_referencia and
+         p.get("data", {}).get("nomeProduto", "").strip().lower() == nome_produto.lower().strip()),
         None
     )
     if not produto_correto:
         return erro("Produto não encontrado", 404)
 
     produto_detalhado_bruto = produto_correto.get("data", {})
-    item_consumido = False
-    similares_consumido = False
+    item_consumido = similares_consumido = componentes_consumido = False
     iniciar_expiracao()
-
-    return jsonify({"mensagem": "Produto detalhado carregado."})
+    # return jsonify({"mensagem": "Produto detalhado carregado."})
+    return produto_detalhado_bruto
 
 @app.route("/item", methods=["GET"])
 def item():
     global produto_detalhado_bruto, item_consumido
     if not produto_detalhado_bruto or is_produto_expirado():
         return erro("Produto expirado, refaça a busca.", 400)
-
     item_consumido = True
+    response = jsonify(processar_item(produto_detalhado_bruto))
     verificar_e_limpar_dados()
-
-    item_tratado = processar_item(produto_detalhado_bruto)
-    return jsonify(item_tratado)
+    return response
 
 @app.route("/similares", methods=["GET"])
 def similares():
     global produto_detalhado_bruto, similares_consumido
     if not produto_detalhado_bruto or is_produto_expirado():
         return erro("Produto expirado, refaça a busca.", 400)
-
     similares_consumido = True
-    similares_tratados = processar_similares(produto_detalhado_bruto)
+    response = jsonify(processar_similares(produto_detalhado_bruto))
     verificar_e_limpar_dados()
-    return jsonify(similares_tratados)
+    return response
 
 @app.route("/lojas", methods=["GET"])
 def lojas():
@@ -249,13 +226,11 @@ def lojas():
             "loja_mais_proxima": rota
         })
     except Exception as e:
-        print("[/lojas] Erro:", e)
         return jsonify({"error": str(e)}), 500
 
 @app.route("/rota-entrega", methods=["GET"])
 def rota_entrega():
-    resultado = calcular_rota_entregas()
-    return jsonify(resultado)
+    return jsonify(calcular_rota_entregas())
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

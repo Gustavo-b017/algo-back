@@ -3,6 +3,8 @@ def processar_similares(produto):
         "id": sim.get("id"),
         "logoMarca": sim.get("logoMarca"),
         "marca": sim.get("marca"),
+        "confiavel": sim.get("confiavel"),
+        "descontinuado": sim.get("descontinuado"),
         "codigoReferencia": sim.get("codigoReferencia")
     } for sim in produto.get("similares", [])]
 
