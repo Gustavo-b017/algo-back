@@ -26,7 +26,7 @@
 ### Backend (Flask)
 2. Instale dependências:
 ```bash
-pip install flask
+pip install -r requirements.txt
 ```
 3. Execute o servidor:
 ```bash
@@ -68,3 +68,16 @@ A aplicação abrirá normalmente em `http://localhost:5173`
 
 *Obrigado!*
 
+OBS:
+* Mesmo se iniciar o backend, não irá modificar no front, pois a chamada ao backend é pelo site que estou hospendando
+* Pórem caso queira, e so ir no front, e modificar a seguinte linha:
+  * Abre SRC
+  * Paginas
+    * Distancia
+    * Entrega
+    * Home
+    * Item
+    * Produto
+    * Sugestão
+  * Deve se comentar a linha "const API_URL = import.meta.env.VITE_API_URL;" em todas as peginas listadas acima 
+  * E descomentar a "const API_URL = 'http://127.0.0.1:5000';" para fazer a requisição local, porém precisará estar rodando o arquivo antes (python app.py)
