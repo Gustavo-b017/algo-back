@@ -40,5 +40,83 @@
     "endereco": "Rua Galvão Bueno, 500 - Liberdade, São Paulo - SP",
     "lat": -23.558163,
     "lon": -46.635075
+  },
+  {
+    "nome": "Loja Paulista",
+    "endereco": "Av. Paulista, 1000 - Bela Vista, São Paulo - SP",
+    "lat": -23.561321,
+    "lon": -46.656584
+  },
+  {
+    "nome": "Loja Itaim",
+    "endereco": "Rua Joaquim Floriano, 466 - Itaim Bibi, São Paulo - SP",
+    "lat": -23.588363,
+    "lon": -46.673416
+  },
+  {
+    "nome": "Loja Moema",
+    "endereco": "Av. Ibirapuera, 3103 - Moema, São Paulo - SP",
+    "lat": -23.602425,
+    "lon": -46.666801
+  },
+  {
+    "nome": "Loja Lapa",
+    "endereco": "Rua Clélia, 1537 - Lapa, São Paulo - SP",
+    "lat": -23.521111,
+    "lon": -46.685556
+  },
+  {
+    "nome": "Loja Tatuapé",
+    "endereco": "Rua Tuiuti, 1200 - Tatuapé, São Paulo - SP",
+    "lat": -23.540000,
+    "lon": -46.576111
+  },
+  {
+    "nome": "Loja Santa Cecília",
+    "endereco": "Rua das Palmeiras, 100 - Santa Cecília, São Paulo - SP",
+    "lat": -23.537308,
+    "lon": -46.651325
+  },
+  {
+    "nome": "Loja Vila Mariana",
+    "endereco": "Rua Domingos de Morais, 348 - Vila Mariana, São Paulo - SP",
+    "lat": -23.589268,
+    "lon": -46.636378
+  },
+  {
+    "nome": "Loja Brooklin",
+    "endereco": "Rua Joaquim Nabuco, 1069 - Brooklin, São Paulo - SP",
+    "lat": -23.621674,
+    "lon": -46.689945
+  },
+  {
+    "nome": "Loja Saúde",
+    "endereco": "Av. Jabaquara, 1600 - Saúde, São Paulo - SP",
+    "lat": -23.619909,
+    "lon": -46.640205
+  },
+  {
+    "nome": "Loja Vila Olímpia",
+    "endereco": "Rua Fidêncio Ramos, 195 - Vila Olímpia, São Paulo - SP",
+    "lat": -23.593644,
+    "lon": -46.687406
+  },
+  {
+    "nome": "Loja Pinheiros",
+    "endereco": "Rua Teodoro Sampaio, 1700 - Pinheiros, São Paulo - SP",
+    "lat": -23.561252,
+    "lon": -46.689127
+  },
+  {
+    "nome": "Loja Santana",
+    "endereco": "Rua Voluntários da Pátria, 2882 - Santana, São Paulo - SP",
+    "lat": -23.493431,
+    "lon": -46.625107
+  },
+  {
+    "nome": "Loja Anália Franco",
+    "endereco": "Rua Emília Marengo, 470 - Anália Franco, São Paulo - SP",
+    "lat": -23.552671,
+    "lon": -46.561932
   }
 ]
