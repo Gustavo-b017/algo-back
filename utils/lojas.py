@@ -14,7 +14,7 @@ def carregar_lojas():
 
 def calcular_distancia(p1, p2):
     return round(geodesic(p1, p2).km, 2)
-
+ 
 def construir_grafo(lojas, origem):
     grafo = {str(origem): {}}
     for loja in lojas:
