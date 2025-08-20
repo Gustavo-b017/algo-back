@@ -10,8 +10,6 @@ from utils.processar_item import processar_item
 from utils.processar_similares import processar_similares
 from flask_compress import Compress
 from utils.token_manager import require_token, obter_token
-from utils.lojas import obter_melhor_rota
-from utils.entrega import calcular_rota_entregas
 
 app = Flask(__name__)
 CORS(app)
@@ -62,7 +60,7 @@ def verificar_e_limpar_dados():
 
 @app.route("/")
 def home():
-    return "API ativa. Rotas: /pesquisar, /autocomplete, /produto, /item, /similares, /lojas, /rota-entrega"
+    return "API ativa. Rotas: /pesquisar, /autocomplete, /produto, /item, /similares"
 
 # NOVO ENDPOINT UNIFICADO /pesquisar
 @app.route("/pesquisar", methods=["GET"])
@@ -207,24 +205,6 @@ def similares():
     verificar_e_limpar_dados()
     return response
 
-@app.route("/lojas", methods=["GET"])
-def lojas():
-    try:
-        rota = obter_melhor_rota()
-        return jsonify({
-            "fiap": {
-                "nome": "FIAP Paulista",
-                "coordenadas": [-23.564372, -46.653923],
-                "endereco": "Av. Paulista, 1106 - Bela Vista, São Paulo - SP"
-            },
-            "loja_mais_proxima": rota
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/rota-entrega", methods=["GET"])
-def rota_entrega():
-    return jsonify(calcular_rota_entregas())
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
