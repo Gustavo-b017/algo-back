@@ -15,15 +15,18 @@ from utils.entrega import calcular_rota_entregas
 
 app = Flask(__name__)
 CORS(app)
-
 Compress(app)
 session = requests.Session()
 
+# O buffer global não é mais necessário para a busca, simplificando o código
+# Mantemos apenas o autocomplete_engine e o buffer de produto detalhado
+autocomplete_engine = AutocompleteAdaptativo()
+termo_buffer = ""
+produto_detalhado_bruto = None
+
+# Funções auxiliares (headers_com_token, erro, etc. continuam iguais)
 def headers_com_token(token):
-    return {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
+    return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 def erro(msg, status=400):
     return jsonify({"success": False, "error": msg}), status
@@ -34,13 +37,7 @@ def obrigatorios(campos: dict):
         return erro(f"Parâmetro(s) obrigatório(s) faltando: {', '.join(faltando)}")
     return None
 
-autocomplete_engine = AutocompleteAdaptativo()
-produtos_buffer = []
-termo_buffer = ""
-contador_buscas = 0
-
-# Buffer global de produto detalhado
-produto_detalhado_bruto = None
+# Funções de gerenciamento do buffer do produto detalhado (continuam iguais)
 item_consumido = False
 similares_consumido = False
 componentes_consumido = False
@@ -65,87 +62,85 @@ def verificar_e_limpar_dados():
 
 @app.route("/")
 def home():
-    return "API ativa. Rotas: /buscar, /tratados, /autocomplete, /produto, /item, /similares, /componentes-filhos"
+    return "API ativa. Rotas: /pesquisar, /autocomplete, /produto, /item, /similares, /lojas, /rota-entrega"
 
-@app.route("/buscar", methods=["GET"])
+# NOVO ENDPOINT UNIFICADO /pesquisar
+@app.route("/pesquisar", methods=["GET"])
 @require_token
-def buscar():
-    global produtos_buffer, contador_buscas, termo_buffer
+def pesquisar():
+    global termo_buffer
+
+    # 1. Pega todos os parâmetros da requisição
     termo = request.args.get("produto", "").strip().lower()
-    val = obrigatorios({"produto": termo})
-    if val: return val
-
-    token = request.token
-    headers = headers_com_token(token)
-
-    url_nome = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
-    payload_nome = {
-        "produtoFiltro": {"nomeProduto": termo},
-        "pagina": 0,
-        "itensPorPagina": 300
-    }
-    res_nome = session.post(url_nome, headers=headers, json=payload_nome)
-    if res_nome.status_code != 200:
-        return erro("Erro ao buscar produtos", 500)
-
-    produtos_brutos = res_nome.json().get("pageResult", {}).get("data", [])
-    produtos_tratados = tratar_dados(produtos_brutos)
-
-    url_super = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/v2/produtos/query/sumario"
-    payload_super = {
-        "veiculoFiltro": {},
-        "superbusca": termo,
-        "pagina": 0,
-        "itensPorPagina": 100
-    }
-    res_super = session.post(url_super, headers=headers, json=payload_super)
-    produtos_super = res_super.json().get("pageResult", {}).get("data", []) if res_super.status_code == 200 else []
-
-    termos_extras = set()
-    for p in produtos_super:
-        data = p.get("data", {})
-        termos_extras.update(data.get("nomeProduto", "").strip().lower().split())
-        termos_extras.add(data.get("codigoReferencia", "").strip().lower())
-        termos_extras.add(data.get("marca", "").strip().lower())
-
-    if termo != termo_buffer:
-        autocomplete_engine.build(produtos_tratados, termo)
-        for termo_extra in termos_extras:
-            autocomplete_engine.build([], termo_extra)
-        termo_buffer = termo
-
-    produtos_buffer = produtos_tratados.copy()
-    contador_buscas = (contador_buscas + 1) % 3
-
-    return jsonify({"mensagem": "Produtos tratados atualizados."})
-
-@app.route("/tratados", methods=["GET"])
-def tratados():
-    global produtos_buffer
+    placa = request.args.get("placa", "").strip()
     marca = request.args.get("marca", "").strip().lower()
     ordem = request.args.get("ordem", "asc").strip().lower() == "asc"
     pagina = int(request.args.get("pagina", 1))
     itens_por_pagina = 15
 
-    resultados = produtos_buffer
+    if not termo:
+        return jsonify({"dados": [], "marcas": [], "pagina": 1, "total_paginas": 0, "proxima_pagina": False, "mensagem_busca": "", "tipo_mensagem": ""})
+
+    token = request.token
+    headers = headers_com_token(token)
+    produtos_brutos = []
+    mensagem_busca = ""
+    tipo_mensagem = ""  # <-- Nova variável para o tipo de mensagem
+
+    # 2. Lógica de busca com fallback
+    if placa:
+        payload_especifico = {"produtoFiltro": {"nomeProduto": termo}, "veiculoFiltro": {"veiculoPlaca": placa}, "pagina": 0, "itensPorPagina": 300}
+        res_especifico = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload_especifico)
+        if res_especifico.status_code == 200:
+            produtos_brutos = res_especifico.json().get("pageResult", {}).get("data", [])
+            # Se encontrou produtos na busca específica, define a mensagem de sucesso
+            if produtos_brutos:
+                mensagem_busca = f"Exibindo resultados compatíveis com a placa '{placa}'."
+                tipo_mensagem = "success"
+
+    if not produtos_brutos:
+        payload_generico = {"produtoFiltro": {"nomeProduto": termo}, "pagina": 0, "itensPorPagina": 300}
+        res_generico = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload_generico)
+        if res_generico.status_code == 200:
+            produtos_genericos = res_generico.json().get("pageResult", {}).get("data", [])
+            if placa and produtos_genericos:
+                mensagem_busca = f"Não foram encontrados produtos para a placa '{placa}'. Exibindo resultados gerais."
+                tipo_mensagem = "info"  # <-- Define a mensagem de fallback (informativa)
+            produtos_brutos = produtos_genericos
+        else:
+            return erro("Erro ao buscar produtos", 500)
+
+    # ... (O resto da função continua igual: autocomplete, filtros, paginação)
+    produtos_tratados = tratar_dados(produtos_brutos)
+    if termo != termo_buffer:
+        autocomplete_engine.build(produtos_tratados, termo)
+        termo_buffer = termo
+
+    marcas_disponiveis = sorted(set(p.get("marca", "") for p in produtos_tratados if p.get("marca")))
+    
+    resultados_filtrados = produtos_tratados
     if marca:
-        resultados = [p for p in resultados if p.get("marca", "").lower() == marca]
+        resultados_filtrados = [p for p in produtos_tratados if p.get("marca", "").lower() == marca]
 
-    resultados = ordenar_produtos(resultados, asc=ordem, key_func=lambda x: x.get('nome', '').lower(), limite=itens_por_pagina + 5)
-    total_itens = len(resultados)
-    total_paginas = (total_itens + itens_por_pagina - 1) // itens_por_pagina
-
+    resultados_ordenados = ordenar_produtos(resultados_filtrados, asc=ordem, key_func=lambda x: x.get('nome', '').lower())
+    
+    total_itens = len(resultados_ordenados)
+    total_paginas = (total_itens + itens_por_pagina - 1) // itens_por_pagina if itens_por_pagina > 0 else 0
     inicio = (pagina - 1) * itens_por_pagina
     fim = inicio + itens_por_pagina
 
+    # 5. Retorna a resposta completa, incluindo o tipo da mensagem
     return jsonify({
-        "marcas": sorted(set(p.get("marca", "") for p in produtos_buffer if p.get("marca"))),
-        "dados": resultados[inicio:fim],
+        "marcas": marcas_disponiveis,
+        "dados": resultados_ordenados[inicio:fim],
         "pagina": pagina,
         "total_paginas": total_paginas,
-        "proxima_pagina": pagina < total_paginas
+        "proxima_pagina": pagina < total_paginas,
+        "mensagem_busca": mensagem_busca,
+        "tipo_mensagem": tipo_mensagem  # <-- Novo campo na resposta
     })
-
+# /buscar e /tratados foram removidos. O resto do código continua igual.
+# ... (código para /autocomplete, /produto, /item, etc.)
 @app.route("/autocomplete", methods=["GET"])
 def autocomplete():
     prefix = request.args.get("prefix", "").strip().lower()
@@ -180,8 +175,8 @@ def produto():
     produtos = res.json().get("pageResult", {}).get("data", [])
     produto_correto = next(
         (p for p in produtos if p.get("data", {}).get("id") == id_enviado and
-         p.get("data", {}).get("codigoReferencia") == codigo_referencia and
-         p.get("data", {}).get("nomeProduto", "").strip().lower() == nome_produto.lower().strip()),
+        p.get("data", {}).get("codigoReferencia") == codigo_referencia and
+        p.get("data", {}).get("nomeProduto", "").strip().lower() == nome_produto.lower().strip()),
         None
     )
     if not produto_correto:
@@ -190,7 +185,6 @@ def produto():
     produto_detalhado_bruto = produto_correto.get("data", {})
     item_consumido = similares_consumido = componentes_consumido = False
     iniciar_expiracao()
-    # return jsonify({"mensagem": "Produto detalhado carregado."})
     return produto_detalhado_bruto
 
 @app.route("/item", methods=["GET"])

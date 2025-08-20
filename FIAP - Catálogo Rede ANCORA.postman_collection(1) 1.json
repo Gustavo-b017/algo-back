@@ -1,0 +1,439 @@
+{
+	"info": {
+		"_postman_id": "9807a585-3861-4f03-8d72-b0a7dcfde334",
+		"name": "FIAP -  Catálogo Rede ANCORA",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "28402072",
+		"_collection_link": "https://interstellar-robot-307524.postman.co/workspace/Rede-Ancora~9387aaf8-6655-4304-8e77-11c4dae6bc3d/collection/28402072-9807a585-3861-4f03-8d72-b0a7dcfde334?action=share&source=collection_link&creator=28402072"
+	},
+	"item": [
+		{
+			"name": "Login",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let response = pm.response.json();",
+							"//console.log(response.access_token);",
+							"pm.collectionVariables.set(\"jwt\", response.access_token);",
+							"//console.log(\"jwt: \"+ pm.collectionVariables.get(\"jwt\"));"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "client_id",
+							"value": "65tvh6rvn4d7uer3hqqm2p8k2pvnm5wx",
+							"type": "text"
+						},
+						{
+							"key": "client_secret",
+							"value": "9Gt2dBRFTUgunSeRPqEFxwNgAfjNUPLP5EBvXKCn",
+							"type": "text"
+						},
+						{
+							"key": "grant_type",
+							"value": "client_credentials",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://sso-catalogo.redeancora.com.br/connect/token",
+					"protocol": "https",
+					"host": [
+						"sso-catalogo",
+						"redeancora",
+						"com",
+						"br"
+					],
+					"path": [
+						"connect",
+						"token"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Search",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{jwt}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{jwt}}",
+						"type": "text",
+						"disabled": true
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r \n    \"produtoFiltro\": {\r \n        \"nomeFabricante\": \"BOSCH\"\r \n    },\r \n    \"veiculoFiltro\": {\r \n        \"veiculoPlaca\": \"DEM8i14\"\r \n    },\r \n    \"pagina\": 0,\r \n    \"itensPorPagina\": 100\r \n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query",
+					"protocol": "https",
+					"host": [
+						"api-stg-catalogo",
+						"redeancora",
+						"com",
+						"br"
+					],
+					"path": [
+						"superbusca",
+						"api",
+						"integracao",
+						"catalogo",
+						"produtos",
+						"query"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Search V2 (versão resumida)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"console.info(\"JWT: \"+pm.globals.get(\"jwt\"));\r",
+							"//console.info(\"jwt: \" + pm.variables.get(\"jwt\"));"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{jwt}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"veiculoFiltro\": {\n        \"veiculoPlaca\": \"DME8I14\"\n    },\n    \"superbusca\": \"AMORTECEDOR\",\n    \"pagina\": 0,\n    \"itensPorPagina\": 100\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/v2/produtos/query/sumario",
+					"protocol": "https",
+					"host": [
+						"api-stg-catalogo",
+						"redeancora",
+						"com",
+						"br"
+					],
+					"path": [
+						"superbusca",
+						"api",
+						"integracao",
+						"catalogo",
+						"v2",
+						"produtos",
+						"query",
+						"sumario"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Produtos Filho",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{jwt}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{jwt}}",
+						"type": "text",
+						"disabled": true
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"produtoFiltro\": {\r\n        \"nomeFabricante\": \"BOSCH\"\r\n    },\r\n    \"veiculoFiltro\": {\r\n        \"veiculoPlaca\": \"DEM8i14\"\r\n    },\r\n    \"pagina\": 0,\r\n    \"itensPorPagina\": 100\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/v2/produtos-filhos/query",
+					"protocol": "https",
+					"host": [
+						"api-stg-catalogo",
+						"redeancora",
+						"com",
+						"br"
+					],
+					"path": [
+						"superbusca",
+						"api",
+						"integracao",
+						"catalogo",
+						"v2",
+						"produtos-filhos",
+						"query"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Montadoras",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{jwt}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{jwt}}",
+						"type": "text",
+						"disabled": true
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"pagina\": 0,\r\n    \"itensPorPagina\": 100\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/veiculo/montadoras/query",
+					"protocol": "https",
+					"host": [
+						"api-stg-catalogo",
+						"redeancora",
+						"com",
+						"br"
+					],
+					"path": [
+						"superbusca",
+						"api",
+						"integracao",
+						"veiculo",
+						"montadoras",
+						"query"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Famílias",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{jwt}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{jwt}}",
+						"type": "text",
+						"disabled": true
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"pagina\": 0,\r\n    \"itensPorPagina\": 100\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/produto/familias/query",
+					"protocol": "https",
+					"host": [
+						"api-stg-catalogo",
+						"redeancora",
+						"com",
+						"br"
+					],
+					"path": [
+						"superbusca",
+						"api",
+						"integracao",
+						"produto",
+						"familias",
+						"query"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Grupos Produtos (Último Nível)",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{jwt}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "{{jwt}}",
+						"type": "text",
+						"disabled": true
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"pagina\": 0,\r\n    \"itensPorPagina\": 100\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/produto/ultimos-niveis/query",
+					"protocol": "https",
+					"host": [
+						"api-stg-catalogo",
+						"redeancora",
+						"com",
+						"br"
+					],
+					"path": [
+						"superbusca",
+						"api",
+						"integracao",
+						"produto",
+						"ultimos-niveis",
+						"query"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "jwt",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
