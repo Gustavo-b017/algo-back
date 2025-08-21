@@ -130,3 +130,6 @@ class AutocompleteAdaptativo:
 
         # Retornamos a busca do nosso motor, que agora está atualizado
         return self.search(prefix)
+    
+# Criamos uma instância única para ser usada em toda a aplicação
+autocomplete_engine = AutocompleteAdaptativo()
