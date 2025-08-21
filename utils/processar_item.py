@@ -12,6 +12,7 @@ def processar_item(produto):
         "montadora": app.get("montadora"),
         "versao": app.get("versao"),
         "geracao": app.get("geracao"),
+        "imagem": app.get("imagem"),
         "motor": app.get("motor")
     } for app in produto.get("aplicacoes", [])]
 
