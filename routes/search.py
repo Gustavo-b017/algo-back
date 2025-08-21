@@ -60,7 +60,8 @@ def get_autocomplete():
 def pesquisar_produtos():
     # Parâmetros da busca guiada
     familia_id = request.args.get("familia_id")
-    montadora_nome = request.args.get("montadora_nome", "").strip().upper() # Guardamos o nome
+    montadora_nome = request.args.get("montadora_nome", "").strip().upper()
+    familia_nome = request.args.get("familia_nome", "").strip() # <-- NOVO
 
     # Parâmetros da busca por texto
     termo = request.args.get("termo", "").strip().lower()
@@ -73,27 +74,40 @@ def pesquisar_produtos():
 
     produtos_brutos = []
     
-    # --- LÓGICA DE DECISÃO ---
-    # Se temos os filtros da cascata, fazemos a busca guiada
     if familia_id and montadora_nome:
-        filtro_produto = {"familiaId": int(familia_id)}
+        # --- MUDANÇA AQUI ---
+        # Agora o filtro é mais específico
+        filtro_produto = {
+            "familiaId": int(familia_id),
+            "nomeProduto": familia_nome 
+        }
         resposta_api = search_service_instance.buscar_produtos(request.token, filtro_produto=filtro_produto, itens_por_pagina=5000)
         
+        # --- DEBUG: VAMOS VER O QUE A API NOS DEU ---
+        if resposta_api:
+            print(f"API retornou {resposta_api.get('pageResult', {}).get('count', 0)} produtos para esta família.")
+        else:
+            print("API não retornou uma resposta válida.")
+        # --- FIM DO DEBUG ---
+
         if resposta_api:
             todos_os_produtos = resposta_api.get("pageResult", {}).get("data", [])
-            # Filtramos no backend para encontrar os produtos da montadora correta
+            
             for produto_item in todos_os_produtos:
                 for aplicacao in produto_item.get("data", {}).get("aplicacoes", []):
                     if aplicacao.get("montadora", "").upper() == montadora_nome:
                         produtos_brutos.append(produto_item)
-                        break # Paramos de verificar este produto assim que encontramos uma aplicação correspondente
-    
+                        break
+
     # Senão, se temos um termo, fazemos a busca por texto
     elif termo:
         filtro_produto = {"nomeProduto": termo}
         resposta_api = search_service_instance.buscar_produtos(request.token, filtro_produto=filtro_produto, itens_por_pagina=500)
         if resposta_api:
             produtos_brutos = resposta_api.get("pageResult", {}).get("data", [])
+    
+    print(f"Encontrados {len(produtos_brutos)} produtos após o nosso filtro.")
+    print(f"--- FIM DA BUSCA GUIADA ---")
 
     # --- PROCESSAMENTO E RESPOSTA ---
     produtos_tratados = tratar_dados(produtos_brutos)
