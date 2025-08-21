@@ -6,5 +6,6 @@ def tratar_dados(lista):
         "potencia": item.get("data", {}).get("aplicacoes", [{}])[0].get("hp", "") if item.get("data", {}).get("aplicacoes") else "",
         "ano_inicio": item.get("data", {}).get("aplicacoes", [{}])[0].get("fabricacaoInicial", "") if item.get("data", {}).get("aplicacoes") else "",
         "ano_fim": item.get("data", {}).get("aplicacoes", [{}])[0].get("fabricacaoFinal", "") if item.get("data", {}).get("aplicacoes") else "",
-        "id": item.get("data", {}).get("id", "")
+        "id": item.get("data", {}).get("id", ""),
+        "imagemReal": item.get("data", {}).get("imagemReal", "")
     } for item in lista]
