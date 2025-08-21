@@ -16,13 +16,11 @@ CORS(app)
 Compress(app)
 session = requests.Session()
 
-# O buffer global não é mais necessário para a busca, simplificando o código
-# Mantemos apenas o autocomplete_engine e o buffer de produto detalhado
 autocomplete_engine = AutocompleteAdaptativo()
 termo_buffer = ""
 produto_detalhado_bruto = None
 
-# Funções auxiliares (headers_com_token, erro, etc. continuam iguais)
+# Funções auxiliares e de gerenciamento de buffer (sem alterações)
 def headers_com_token(token):
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
@@ -35,7 +33,6 @@ def obrigatorios(campos: dict):
         return erro(f"Parâmetro(s) obrigatório(s) faltando: {', '.join(faltando)}")
     return None
 
-# Funções de gerenciamento do buffer do produto detalhado (continuam iguais)
 item_consumido = False
 similares_consumido = False
 componentes_consumido = False
@@ -62,13 +59,15 @@ def verificar_e_limpar_dados():
 def home():
     return "API ativa. Rotas: /pesquisar, /autocomplete, /produto, /item, /similares"
 
-# NOVO ENDPOINT UNIFICADO /pesquisar
+# Apenas as rotas de montadoras/categorias foram removidas por enquanto
+# O resto do seu app.py está aqui...
+
 @app.route("/pesquisar", methods=["GET"])
 @require_token
 def pesquisar():
     global termo_buffer
 
-    # 1. Pega todos os parâmetros da requisição
+    # 1. Pega os parâmetros da requisição
     termo = request.args.get("produto", "").strip().lower()
     placa = request.args.get("placa", "").strip()
     marca = request.args.get("marca", "").strip().lower()
@@ -83,34 +82,35 @@ def pesquisar():
     headers = headers_com_token(token)
     produtos_brutos = []
     mensagem_busca = ""
-    tipo_mensagem = ""  # <-- Nova variável para o tipo de mensagem
+    tipo_mensagem = ""
 
-    # 2. Lógica de busca com fallback
+    # --- LÓGICA DE BUSCA CORRIGIDA ---
+    # 2. Tenta a busca específica (PRODUTO + PLACA) se a placa for fornecida
     if placa:
-        payload_especifico = {"produtoFiltro": {"nomeProduto": termo}, "veiculoFiltro": {"veiculoPlaca": placa}, "pagina": 0, "itensPorPagina": 300}
+        payload_especifico = {"produtoFiltro": {"nomeProduto": termo}, "veiculoFiltro": {"veiculoPlaca": placa}, "pagina": 0, "itensPorPagina": 500}
         res_especifico = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload_especifico)
         if res_especifico.status_code == 200:
             produtos_brutos = res_especifico.json().get("pageResult", {}).get("data", [])
-            # Se encontrou produtos na busca específica, define a mensagem de sucesso
             if produtos_brutos:
                 mensagem_busca = f"Exibindo resultados compatíveis com a placa '{placa}'."
                 tipo_mensagem = "success"
 
+    # 3. Se a busca específica falhou (ou não foi feita), faz a busca genérica
     if not produtos_brutos:
-        payload_generico = {"produtoFiltro": {"nomeProduto": termo}, "pagina": 0, "itensPorPagina": 300}
+        payload_generico = {"produtoFiltro": {"nomeProduto": termo}, "pagina": 0, "itensPorPagina": 500}
         res_generico = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload_generico)
         if res_generico.status_code == 200:
             produtos_genericos = res_generico.json().get("pageResult", {}).get("data", [])
             if placa and produtos_genericos:
-                mensagem_busca = f"Não foram encontrados produtos para a placa '{placa}'. Exibindo resultados gerais."
-                tipo_mensagem = "info"  # <-- Define a mensagem de fallback (informativa)
+                mensagem_busca = f"Não encontramos resultados para a placa '{placa}'. Exibindo resultados gerais."
+                tipo_mensagem = "info"
             produtos_brutos = produtos_genericos
         else:
             return erro("Erro ao buscar produtos", 500)
 
-    # ... (O resto da função continua igual: autocomplete, filtros, paginação)
+    # 4. Processa os resultados obtidos (sejam eles da busca específica ou genérica)
     produtos_tratados = tratar_dados(produtos_brutos)
-    if termo != termo_buffer:
+    if termo and termo != termo_buffer:
         autocomplete_engine.build(produtos_tratados, termo)
         termo_buffer = termo
 
@@ -127,7 +127,7 @@ def pesquisar():
     inicio = (pagina - 1) * itens_por_pagina
     fim = inicio + itens_por_pagina
 
-    # 5. Retorna a resposta completa, incluindo o tipo da mensagem
+    # 5. Retorna a resposta completa
     return jsonify({
         "marcas": marcas_disponiveis,
         "dados": resultados_ordenados[inicio:fim],
@@ -135,10 +135,9 @@ def pesquisar():
         "total_paginas": total_paginas,
         "proxima_pagina": pagina < total_paginas,
         "mensagem_busca": mensagem_busca,
-        "tipo_mensagem": tipo_mensagem  # <-- Novo campo na resposta
+        "tipo_mensagem": tipo_mensagem
     })
-# /buscar e /tratados foram removidos. O resto do código continua igual.
-# ... (código para /autocomplete, /produto, /item, etc.)
+
 @app.route("/autocomplete", methods=["GET"])
 def autocomplete():
     prefix = request.args.get("prefix", "").strip().lower()
@@ -157,26 +156,14 @@ def produto():
 
     token = request.token
     headers = headers_com_token(token)
-    payload = {
-        "produtoFiltro": {
-            "nomeProduto": nome_produto.upper().strip(),
-            "codigoReferencia": codigo_referencia,
-            "id": id_enviado
-        },
-        "pagina": 0,
-        "itensPorPagina": 20
-    }
+    payload = { "produtoFiltro": { "nomeProduto": nome_produto.upper().strip(), "codigoReferencia": codigo_referencia, "id": id_enviado }, "pagina": 0, "itensPorPagina": 20 }
     res = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload)
     if res.status_code != 200:
         return erro("Erro ao consultar produtos", 500)
 
     produtos = res.json().get("pageResult", {}).get("data", [])
-    produto_correto = next(
-        (p for p in produtos if p.get("data", {}).get("id") == id_enviado and
-        p.get("data", {}).get("codigoReferencia") == codigo_referencia and
-        p.get("data", {}).get("nomeProduto", "").strip().lower() == nome_produto.lower().strip()),
-        None
-    )
+    produto_correto = next((p for p in produtos if p.get("data", {}).get("id") == id_enviado), None)
+    
     if not produto_correto:
         return erro("Produto não encontrado", 404)
 
@@ -204,7 +191,6 @@ def similares():
     response = jsonify(processar_similares(produto_detalhado_bruto))
     verificar_e_limpar_dados()
     return response
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
