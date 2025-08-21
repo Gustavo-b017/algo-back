@@ -56,15 +56,17 @@ def get_autocomplete():
 
 
 @search_bp.route("/pesquisar", methods=["GET"])
+@search_bp.route("/pesquisar", methods=["GET"])
 @require_token
 def pesquisar_produtos():
     # Parâmetros da busca guiada
     familia_id = request.args.get("familia_id")
     montadora_nome = request.args.get("montadora_nome", "").strip().upper()
-    familia_nome = request.args.get("familia_nome", "").strip() # <-- NOVO
+    familia_nome = request.args.get("familia_nome", "").strip()
 
     # Parâmetros da busca por texto
     termo = request.args.get("termo", "").strip().lower()
+    placa = request.args.get("placa", "").strip().upper() # Recebe o parâmetro da placa
     marca_filtro = request.args.get("marca", "").strip().lower()
     
     # Parâmetros de paginação e ordenação
@@ -73,23 +75,15 @@ def pesquisar_produtos():
     itens_por_pagina = 15
 
     produtos_brutos = []
-    
+    mensagem = ""
+
     if familia_id and montadora_nome:
-        # --- MUDANÇA AQUI ---
-        # Agora o filtro é mais específico
         filtro_produto = {
             "familiaId": int(familia_id),
             "nomeProduto": familia_nome 
         }
         resposta_api = search_service_instance.buscar_produtos(request.token, filtro_produto=filtro_produto, itens_por_pagina=5000)
         
-        # --- DEBUG: VAMOS VER O QUE A API NOS DEU ---
-        if resposta_api:
-            print(f"API retornou {resposta_api.get('pageResult', {}).get('count', 0)} produtos para esta família.")
-        else:
-            print("API não retornou uma resposta válida.")
-        # --- FIM DO DEBUG ---
-
         if resposta_api:
             todos_os_produtos = resposta_api.get("pageResult", {}).get("data", [])
             
@@ -98,16 +92,24 @@ def pesquisar_produtos():
                     if aplicacao.get("montadora", "").upper() == montadora_nome:
                         produtos_brutos.append(produto_item)
                         break
-
-    # Senão, se temos um termo, fazemos a busca por texto
-    elif termo:
-        filtro_produto = {"nomeProduto": termo}
-        resposta_api = search_service_instance.buscar_produtos(request.token, filtro_produto=filtro_produto, itens_por_pagina=500)
-        if resposta_api:
-            produtos_brutos = resposta_api.get("pageResult", {}).get("data", [])
     
-    print(f"Encontrados {len(produtos_brutos)} produtos após o nosso filtro.")
-    print(f"--- FIM DA BUSCA GUIADA ---")
+    # Lógica de busca por texto atualizada
+    elif termo:
+        # PRIMEIRO PASSO: Tenta buscar com o termo e a placa
+        filtro_produto = {"nomeProduto": termo}
+        filtro_veiculo = {"veiculoPlaca": placa}
+        
+        resposta_api = search_service_instance.buscar_produtos(request.token, filtro_produto=filtro_produto, filtro_veiculo=filtro_veiculo, itens_por_pagina=500)
+        
+        if resposta_api and resposta_api.get("pageResult", {}).get("data"):
+            produtos_brutos = resposta_api.get("pageResult", {}).get("data", [])
+            mensagem = f"Resultados encontrados para a placa: {placa}."
+        else:
+            # SEGUNDO PASSO: Se não encontrou, busca somente com o termo
+            resposta_api = search_service_instance.buscar_produtos(request.token, filtro_produto=filtro_produto, itens_por_pagina=500)
+            if resposta_api:
+                produtos_brutos = resposta_api.get("pageResult", {}).get("data", [])
+                mensagem = f"Não foram encontrados resultados específicos para a placa: {placa}, exibindo resultados gerais."
 
     # --- PROCESSAMENTO E RESPOSTA ---
     produtos_tratados = tratar_dados(produtos_brutos)
@@ -131,5 +133,6 @@ def pesquisar_produtos():
         "dados": resultados_ordenados[inicio:fim],
         "pagina": pagina,
         "total_paginas": total_paginas,
-        "proxima_pagina": pagina < total_paginas
+        "proxima_pagina": pagina < total_paginas,
+        "mensagem": mensagem
     })
