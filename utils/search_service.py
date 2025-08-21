@@ -3,80 +3,120 @@ from Levenshtein import distance as levenshtein_distance
 
 session = requests.Session()
 
-# Reintroduzimos o AutocompleteAdaptativo para gerenciar o índice em memória
-from utils.autocomplete_adaptativo import AutocompleteAdaptativo
-autocomplete_engine = AutocompleteAdaptativo()
+# As outras funções como get_search_results permanecem as mesmas
+def get_search_results(token, params):
+    """Orquestra a busca principal de produtos com lógica de fallback."""
+    termo = params.get("produto", "").lower()
+    placa = params.get("placa", "")
+    marca = params.get("marca", "").lower()
+    ordem = params.get("ordem", "asc").lower() == "asc"
+    pagina = int(params.get("pagina", 1))
+    itens_por_pagina = 15
+    
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    produtos_brutos = []
+    mensagem_busca = ""
+    tipo_mensagem = ""
+
+    if placa:
+        payload = {"produtoFiltro": {"nomeProduto": termo}, "veiculoFiltro": {"veiculoPlaca": placa}, "pagina": 0, "itensPorPagina": 500}
+        res = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload)
+        if res.status_code == 200:
+            produtos_brutos = res.json().get("pageResult", {}).get("data", [])
+            if produtos_brutos:
+                mensagem_busca = f"Exibindo resultados compatíveis com a placa '{placa}'."
+                tipo_mensagem = "success"
+    
+    if not produtos_brutos:
+        payload = {"produtoFiltro": {"nomeProduto": termo}, "pagina": 0, "itensPorPagina": 500}
+        res = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload)
+        if res.status_code == 200:
+            produtos_genericos = res.json().get("pageResult", {}).get("data", [])
+            if placa and produtos_genericos:
+                mensagem_busca = f"Não encontramos resultados para a placa '{placa}'. Exibindo resultados gerais."
+                tipo_mensagem = "info"
+            produtos_brutos = produtos_genericos
+        else:
+            raise Exception("Erro ao buscar produtos na API externa.")
+
+    # O import de tratar_dados e ordenar_produtos deve estar aqui
+    from utils.preprocess import tratar_dados
+    from utils.sort import ordenar_produtos
+    produtos_tratados = tratar_dados(produtos_brutos)
+    
+    marcas_disponiveis = sorted(set(p.get("marca", "") for p in produtos_tratados if p.get("marca")))
+    resultados_filtrados = [p for p in produtos_tratados if not marca or p.get("marca", "").lower() == marca]
+    resultados_ordenados = ordenar_produtos(resultados_filtrados, asc=ordem, key_func=lambda x: x.get('nome', '').lower())
+    
+    total_itens = len(resultados_ordenados)
+    total_paginas = (total_itens + itens_por_pagina - 1) // itens_por_pagina if itens_por_pagina > 0 else 0
+    inicio = (pagina - 1) * itens_por_pagina
+    fim = inicio + itens_por_pagina
+
+    return {
+        "marcas": marcas_disponiveis,
+        "dados": resultados_ordenados[inicio:fim],
+        "pagina": pagina, "total_paginas": total_paginas, "proxima_pagina": pagina < total_paginas,
+        "mensagem_busca": mensagem_busca, "tipo_mensagem": tipo_mensagem
+    }
 
 
 def get_autocomplete_suggestions(token, prefix, placa=None):
-    """
-    Nova lógica de autocomplete: busca em duas APIs, trata os dados,
-    indexa e retorna as sugestões mais relevantes.
-    """
+    """Busca sugestões em duas APIs e as ordena por relevância, priorizando a placa."""
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    produtos_brutos = []
-
-    # 1. FAZ A REQUISIÇÃO EM 2 APIs PARA OBTER DADOS RICOS
     
-    # API 1: Busca principal (mais detalhada)
-    payload_query = {"produtoFiltro": {"nomeProduto": prefix}, "pagina": 0, "itensPorPagina": 50}
-    if placa:
-        payload_query["veiculoFiltro"] = {"veiculoPlaca": placa}
-    res_query = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query", headers=headers, json=payload_query)
-    if res_query.status_code == 200:
-        produtos_brutos.extend(res_query.json().get("pageResult", {}).get("data", []))
-
-    # API 2: Superbusca (mais rápida, para termos genéricos)
-    payload_super = {"superbusca": prefix, "pagina": 0, "itensPorPagina": 50}
-    if placa:
-        payload_super["veiculoFiltro"] = {"veiculoPlaca": placa}
-    res_super = session.post("https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/v2/produtos/query/sumario", headers=headers, json=payload_super)
+    # --- 1. BUSCA GENÉRICA (SUPERBUSCA) - GARANTE QUE SEMPRE TENHAMOS SUGESTÕES ---
+    sugestoes_genericas = set()
+    url_super = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/v2/produtos/query/sumario"
+    payload_super = {"superbusca": prefix, "pagina": 0, "itensPorPagina": 20}
+    res_super = session.post(url_super, headers=headers, json=payload_super)
     if res_super.status_code == 200:
-        produtos_brutos.extend(res_super.json().get("pageResult", {}).get("data", []))
+        produtos = res_super.json().get("pageResult", {}).get("data", [])
+        for p in produtos:
+            nome = p.get("data", {}).get("nomeProduto", "").strip()
+            if nome:
+                sugestoes_genericas.add(nome.lower())
 
-    # 2. TRATAMENTO DE DADOS SIMPLIFICADO
-    # Mantém apenas nome, código e adiciona um marcador se veio da busca com placa
-    produtos_tratados = []
-    ids_vistos = set()
-    for item in produtos_brutos:
-        data = item.get("data", {})
-        produto_id = data.get("id")
-        if produto_id and produto_id not in ids_vistos:
-            produtos_tratados.append({
-                "nome": data.get("nomeProduto", "").strip(),
-                "codigoReferencia": data.get("codigoReferencia", "").strip(),
-                "marca": data.get("marca", "").strip(),
-                "is_specific": "veiculoFiltro" in payload_query # Marca se o resultado é específico da placa
-            })
-            ids_vistos.add(produto_id)
-
-    # 3. CHAMA O AUTOCOMPLETE (agora como um motor de indexação e busca)
-    autocomplete_engine.clear() # Limpa o índice antigo
-    autocomplete_engine.build(produtos_tratados) # Constrói um novo índice com os dados frescos
-    sugestoes = autocomplete_engine.search(prefix)
+    # --- 2. BUSCA ESPECIALIZADA (COM PLACA) - PARA RELEVÂNCIA MÁXIMA ---
+    nomes_produtos_especificos = set()
+    if placa:
+        url_query = "https://api-stg-catalogo.redeancora.com.br/superbusca/api/integracao/catalogo/produtos/query"
+        payload_query = {"produtoFiltro": {"nomeProduto": prefix}, "veiculoFiltro": {"veiculoPlaca": placa}, "pagina": 0, "itensPorPagina": 20}
+        res_query = session.post(url_query, headers=headers, json=payload_query)
+        if res_query.status_code == 200:
+            produtos = res_query.json().get("pageResult", {}).get("data", [])
+            for p in produtos:
+                nome = p.get("data", {}).get("nomeProduto", "").strip()
+                if nome:
+                    nomes_produtos_especificos.add(nome.lower())
     
-    # 4. ORDENAÇÃO POR RELEVÂNCIA (CLASSIFICAÇÃO)
+    # --- 3. COMBINAÇÃO E CLASSIFICAÇÃO ---
+    todas_as_sugestoes = sugestoes_genericas.union(nomes_produtos_especificos)
+    
     sugestoes_com_score = []
-    for sugestao in sugestoes:
-        # Encontra o produto original para checar se é específico da placa
-        produto_original = next((p for p in produtos_tratados if p["nome"].lower() == sugestao.lower()), None)
+    for sugestao in todas_as_sugestoes:
         score = 0
         
-        if produto_original and produto_original["is_specific"]:
-            score += 100 # Prioridade máxima para produtos compatíveis com a placa
-
+        # Prioridade máxima se a sugestão veio da busca específica com placa
+        if sugestao in nomes_produtos_especificos:
+            score += 1000
+        
         if sugestao.lower().startswith(prefix.lower()):
-            score += 10
+            score += 100
         
         distancia = levenshtein_distance(prefix, sugestao)
-        score += 1 / (distancia + 1)
+        score += 10 / (distancia + 1)
         
         sugestoes_com_score.append((sugestao, score))
 
     sugestoes_ordenadas = sorted(sugestoes_com_score, key=lambda item: item[1], reverse=True)
     
-    return [sugestao for sugestao, score in sugestoes_ordenadas]
+    # Remove duplicados mantendo a ordem de relevância
+    sugestoes_finais = []
+    vistos = set()
+    for sugestao, score in sugestoes_ordenadas:
+        if sugestao not in vistos:
+            sugestoes_finais.append(sugestao)
+            vistos.add(sugestao)
 
-# A função de busca principal não precisa mais existir aqui,
-# pois a lógica de fallback já está no app.py e funcionando bem.
-# Manter o código enxuto e focado.
+    return sugestoes_finais[:10]
