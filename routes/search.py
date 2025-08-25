@@ -56,7 +56,6 @@ def get_autocomplete():
 
 
 @search_bp.route("/pesquisar", methods=["GET"])
-@search_bp.route("/pesquisar", methods=["GET"])
 @require_token
 def pesquisar_produtos():
     # Parâmetros da busca guiada
@@ -135,4 +134,46 @@ def pesquisar_produtos():
         "total_paginas": total_paginas,
         "proxima_pagina": pagina < total_paginas,
         "mensagem": mensagem
+    })
+
+@search_bp.route("/pesquisar-por-subfamilia", methods=["GET"])
+@require_token
+def pesquisar_subfamilia():
+    # Parâmetros para a busca de sub-família
+    familia_id = request.args.get("familia_id", type=int)
+    subfamilia_nome = request.args.get("subfamilia_nome", "").strip()
+
+    if not familia_id or not subfamilia_nome:
+        return jsonify({"success": False, "error": "Os parâmetros 'familia_id' e 'subfamilia_nome' são obrigatórios."}), 400
+
+    # Parâmetros de paginação e ordenação (pode-se adicionar filtros de marca aqui também)
+    pagina = int(request.args.get("pagina", 1))
+    ordem = request.args.get("ordem", "asc").strip().lower() == "asc"
+    itens_por_pagina = 15
+
+    filtro_produto = {
+        "familiaId": familia_id,
+        "nomeProduto": subfamilia_nome
+    }
+    
+    resposta_api = search_service_instance.buscar_produtos(request.token, filtro_produto=filtro_produto, itens_por_pagina=5000)
+
+    if not resposta_api or not resposta_api.get("pageResult", {}).get("data"):
+        return jsonify({"success": False, "error": "Nenhum produto encontrado para a sub-família."}), 404
+
+    produtos_brutos = resposta_api.get("pageResult", {}).get("data", [])
+    produtos_tratados = tratar_dados(produtos_brutos)
+
+    # Processamento e Paginação
+    resultados_ordenados = ordenar_produtos(produtos_tratados, asc=ordem, key_func=lambda x: x.get('nome', '').lower())
+    total_itens = len(resultados_ordenados)
+    total_paginas = (total_itens + itens_por_pagina - 1) // itens_por_pagina if itens_por_pagina > 0 else 0
+    inicio = (pagina - 1) * itens_por_pagina
+    fim = inicio + itens_por_pagina
+
+    return jsonify({
+        "dados": resultados_ordenados[inicio:fim],
+        "pagina": pagina,
+        "total_paginas": total_paginas,
+        "proxima_pagina": pagina < total_paginas
     })
