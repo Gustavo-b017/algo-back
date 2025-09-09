@@ -1,11 +1,25 @@
+# utils/preprocess.py
+from utils.processar_item import _calcular_precos_simulados  # <— reusa o mesmo algoritmo
+
 def tratar_dados(lista):
-    return [{
-        "nome": item.get("data", {}).get("nomeProduto", "").strip(),
-        "marca": item.get("data", {}).get("marca", "").strip(),
-        "codigoReferencia": item.get("data", {}).get("codigoReferencia", "").strip(),
-        "potencia": item.get("data", {}).get("aplicacoes", [{}])[0].get("hp", "") if item.get("data", {}).get("aplicacoes") else "",
-        "ano_inicio": item.get("data", {}).get("aplicacoes", [{}])[0].get("fabricacaoInicial", "") if item.get("data", {}).get("aplicacoes") else "",
-        "ano_fim": item.get("data", {}).get("aplicacoes", [{}])[0].get("fabricacaoFinal", "") if item.get("data", {}).get("aplicacoes") else "",
-        "id": item.get("data", {}).get("id", ""),
-        "imagemReal": item.get("data", {}).get("imagemReal", "")
-    } for item in lista]
+    tratados = []
+    for item in lista:
+        data = item.get("data", {})
+        preco = _calcular_precos_simulados(data)  # seed por id/nomeProduto
+
+        tratados.append({
+            "nome": data.get("nomeProduto", "").strip(),
+            "marca": data.get("marca", "").strip(),
+            "codigoReferencia": data.get("codigoReferencia", "").strip(),
+            "potencia": (data.get("aplicacoes") or [{}])[0].get("hp", ""),
+            "ano_inicio": (data.get("aplicacoes") or [{}])[0].get("fabricacaoInicial", ""),
+            "ano_fim": (data.get("aplicacoes") or [{}])[0].get("fabricacaoFinal", ""),
+            "id": data.get("id", ""),
+            "imagemReal": data.get("imagemReal", ""),
+            # ↓ novos campos usados nos cards
+            "preco": preco["preco"],
+            "precoOriginal": preco["precoOriginal"],
+            "descontoPercentual": preco["descontoPercentual"],
+            "parcelas": preco["parcelas"],
+        })
+    return tratados
