@@ -62,18 +62,17 @@ def processar_item(produto):
         "subFamiliaDescricao": familia.get("subFamilia", {}).get("descricao")
     } if familia else {}
 
-    # --- NOVO: preços simulados, estáveis por item ---
     precos = _calcular_precos_simulados(produto)
 
     return {
         "nomeProduto": produto.get("nomeProduto"),
         "id": produto.get("id"),
         "marca": produto.get("marca"),
+        "codigoReferencia": produto.get("codigoReferencia"), # <--- LINHA ADICIONADA
         "imagemReal": produto.get("imagemReal"),
         "logomarca": produto.get("logoMarca"),
         "score": produto.get("score"),
         "aplicacoes": aplicacoes,
         "familia": familia_obj,
-        # Campos de preço simulados
         **precos
     }
