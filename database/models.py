@@ -14,7 +14,9 @@ class Usuario(db.Model):
 
 class Produto(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    id_api_externa = db.Column(db.Integer, nullable=False)
+    id_api_externa = db.Column(
+        db.Integer, nullable=False, unique=True
+    )  # Adicionado unique=True para garantir um produto por carrinho
     nome = db.Column(db.String(255), nullable=False)
     codigo_referencia = db.Column(db.String(100), nullable=False)
     url_imagem = db.Column(db.String(255), nullable=True)
@@ -22,8 +24,8 @@ class Produto(db.Model):
     preco_final = db.Column(db.Float, nullable=False)
     desconto = db.Column(db.Float, nullable=True)
     marca = db.Column(db.String(100), nullable=False)
+    quantidade = db.Column(db.Integer, nullable=False, default=1)  # <-- NOVA COLUNA
 
-    # ADICIONE ESTE MÉTODO
     def to_dict(self):
         return {
             "id": self.id,
@@ -35,4 +37,5 @@ class Produto(db.Model):
             "preco_final": self.preco_final,
             "desconto": self.desconto,
             "marca": self.marca,
+            "quantidade": self.quantidade,  # <-- INCLUIR NO MÉTODO
         }
