@@ -3,8 +3,9 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_compress import Compress
 
-# Importa a extensão SQLAlchemy
-from flask_sqlalchemy import SQLAlchemy
+# Importe a instância do SQLAlchemy e os modelos da nova pasta
+from database.__init__ import db
+from database.models import Usuario, Produto 
 
 # 1. Importamos os nossos Blueprints de rotas
 from routes.search import search_bp
@@ -17,17 +18,8 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://root@localhost/ancora_teste'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Inicializa o SQLAlchemy
-db = SQLAlchemy(app)
-
-# Define uma classe de modelo (tabela de exemplo)
-class Usuario(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-
-    def __repr__(self):
-        return f'<Usuario {self.nome}>'
+# Inicialize o objeto db com o app
+db.init_app(app)
 
 # 2. Configuramos as extensões
 CORS(app)
