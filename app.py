@@ -14,8 +14,22 @@ from routes.product import product_bp
 # Cria a instância da aplicação Flask no nível superior
 app = Flask(__name__)
 
-# Configurações do banco de dados
-app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+mysqlconnector://root@localhost/ancora_teste'
+import os # <-- Adicione esta importação
+from flask import Flask, jsonify
+# ... (outras importações)
+
+app = Flask(__name__)
+
+# --- INÍCIO DA MODIFICAÇÃO ---
+
+# Lógica para usar o banco de dados do Railway em produção ou o local em desenvolvimento
+db_url = os.environ.get("DATABASE_URL")
+if db_url and db_url.startswith("mysql://"):
+    # O Railway usa "mysql://", mas o mysqlconnector precisa de "mysql+mysqlconnector://"
+    db_url = db_url.replace("mysql://", "mysql+mysqlconnector://", 1)
+
+# Define a URI do banco de dados. Se a variável de ambiente não existir, usa a string local.
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'mysql+mysqlconnector://root@localhost/ancora_teste'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Inicialize o objeto db com o app

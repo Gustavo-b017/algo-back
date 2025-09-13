@@ -7,3 +7,4 @@ python-Levenshtein
 geopy
 mysql-connector-python
 Flask-SQLAlchemy
+gunicorn
