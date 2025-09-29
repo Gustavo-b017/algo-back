@@ -79,13 +79,23 @@ def salvar_produto():
     quantidade_para_adicionar = dados.get("quantidade", 1)
 
     try:
-        produto_existente = Produto.query.filter_by(id_api_externa=dados["id_api_externa"]).first()
+        produto_existente = Produto.query.filter_by(
+            id_api_externa=dados["id_api_externa"]
+        ).first()
 
         if produto_existente:
             # Se existe, incrementa a quantidade com o valor recebido
             produto_existente.quantidade += quantidade_para_adicionar
             db.session.commit()
-            return jsonify({"success": True, "message": f"{quantidade_para_adicionar} item(ns) adicionado(s) ao carrinho!"}), 200
+            return (
+                jsonify(
+                    {
+                        "success": True,
+                        "message": f"{quantidade_para_adicionar} item(ns) adicionado(s) ao carrinho!",
+                    }
+                ),
+                200,
+            )
         else:
             # Se não existe, cria um novo registro com a quantidade especificada
             novo_produto = Produto(
@@ -97,16 +107,26 @@ def salvar_produto():
                 preco_final=float(dados.get("preco_final", 0.0)),
                 desconto=float(dados.get("desconto", 0.0)),
                 marca=dados["marca"],
-                quantidade=quantidade_para_adicionar # Define a quantidade inicial
+                quantidade=quantidade_para_adicionar,  # Define a quantidade inicial
             )
             db.session.add(novo_produto)
             db.session.commit()
-            return jsonify({"success": True, "message": "Produto adicionado ao carrinho!"}), 201
+            return (
+                jsonify(
+                    {"success": True, "message": "Produto adicionado ao carrinho!"}
+                ),
+                201,
+            )
 
     except Exception as e:
         db.session.rollback()
         print(f"Erro ao salvar produto: {e}")
-        return jsonify({"success": False, "error": "Ocorreu um erro ao salvar o produto."}), 500
+        return (
+            jsonify(
+                {"success": False, "error": "Ocorreu um erro ao salvar o produto."}
+            ),
+            500,
+        )
 
 
 @product_bp.route("/carrinho", methods=["GET"])
@@ -126,20 +146,103 @@ def get_produtos_carrinho():
 @require_token
 def remover_produto_carrinho():
     dados = request.get_json()
-    if not dados or 'id_api_externa' not in dados:
+    if not dados or "id_api_externa" not in dados:
         return jsonify({"success": False, "error": "ID do produto não fornecido."}), 400
 
     try:
-        produto_para_remover = Produto.query.filter_by(id_api_externa=dados['id_api_externa']).first()
-        
+        produto_para_remover = Produto.query.filter_by(
+            id_api_externa=dados["id_api_externa"]
+        ).first()
+
         if not produto_para_remover:
-            return jsonify({"success": False, "error": "Produto não encontrado no carrinho."}), 404
+            return (
+                jsonify(
+                    {"success": False, "error": "Produto não encontrado no carrinho."}
+                ),
+                404,
+            )
 
         db.session.delete(produto_para_remover)
         db.session.commit()
 
-        return jsonify({"success": True, "message": "Produto removido do carrinho."}), 200
+        return (
+            jsonify({"success": True, "message": "Produto removido do carrinho."}),
+            200,
+        )
     except Exception as e:
         db.session.rollback()
         print(f"Erro ao remover produto do carrinho: {e}")
+        return jsonify({"success": False, "error": "Erro interno do servidor"}), 500
+
+
+@product_bp.route("/carrinho/produto/atualizar-quantidade", methods=["POST"])
+@require_token
+def atualizar_quantidade_produto():
+    """
+    Atualiza a quantidade de um produto no carrinho.
+    Body JSON:
+      {
+        "id_api_externa": <int>,
+        "quantidade": <int>   # nova quantidade absoluta
+      }
+    Regras:
+      - Se quantidade <= 0: remove o produto do carrinho.
+      - Se produto não existir: 404.
+      - Retorna o produto atualizado (quando aplicável).
+    """
+    dados = request.get_json() or {}
+    id_api_externa = dados.get("id_api_externa")
+    quantidade = dados.get("quantidade")
+
+    if id_api_externa is None:
+        return jsonify({"success": False, "error": "ID do produto não fornecido."}), 400
+    if quantidade is None:
+        return jsonify({"success": False, "error": "Quantidade não fornecida."}), 400
+
+    # Sanitização
+    try:
+        quantidade = int(quantidade)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Quantidade inválida."}), 400
+
+    try:
+        produto = Produto.query.filter_by(id_api_externa=id_api_externa).first()
+        if not produto:
+            return (
+                jsonify(
+                    {"success": False, "error": "Produto não encontrado no carrinho."}
+                ),
+                404,
+            )
+
+        if quantidade <= 0:
+            db.session.delete(produto)
+            db.session.commit()
+            return (
+                jsonify(
+                    {
+                        "success": True,
+                        "message": "Produto removido do carrinho.",
+                        "removido": True,
+                    }
+                ),
+                200,
+            )
+
+        produto.quantidade = quantidade
+        db.session.commit()
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "message": "Quantidade atualizada com sucesso.",
+                    "produto": produto.to_dict(),
+                }
+            ),
+            200,
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Erro ao atualizar quantidade: {e}")
         return jsonify({"success": False, "error": "Erro interno do servidor"}), 500
