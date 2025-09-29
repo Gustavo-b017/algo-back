@@ -7,6 +7,20 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+# tenta carregar .env caso este módulo seja importado fora do app.py
+try:
+    from dotenv import load_dotenv
+
+    if not (
+        os.getenv("AUTH_TOKEN_URL")
+        and os.getenv("AUTH_CLIENT_ID")
+        and os.getenv("AUTH_CLIENT_SECRET")
+    ):
+        # carrega .env do CWD se existir; não sobrescreve valores já definidos
+        load_dotenv(override=False)
+except Exception:
+    pass
+
 log = logging.getLogger(__name__)
 
 
@@ -16,7 +30,6 @@ class AuthService:
         self._cached_token = None
         self._token_expiry = 0
 
-        # helper para ler envs (obriga as sensíveis)
         def _env(
             name: str, default: str | None = None, required: bool = False
         ) -> str | None:

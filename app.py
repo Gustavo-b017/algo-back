@@ -3,12 +3,25 @@ import os
 import logging
 from urllib.parse import quote_plus
 
+# Carrega .env de forma robusta (sem find_dotenv)
+def _load_env():
+    from dotenv import load_dotenv
+    base_dir = os.path.abspath(os.path.dirname(__file__))
+    # tenta .env na raiz do projeto (mesmo dir do app.py)
+    env_path = os.path.join(base_dir, ".env")
+    if os.path.isfile(env_path):
+        load_dotenv(env_path, override=True)
+    else:
+        # fallback: tenta a partir do CWD (útil em alguns runners)
+        load_dotenv(override=True)
+
+_load_env()
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_compress import Compress
-
 from database.__init__ import db
-from database.models import Usuario, Produto  # mantém import explícito para registrar os models
+from database.models import Usuario, Produto
 from routes.search import search_bp
 from routes.product import product_bp
 
@@ -60,7 +73,7 @@ db_url = _build_db_uri()
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config.update(
     JSON_SORT_KEYS=False,               # não reordena chaves de JSON (mantém tua ordem)
-    JSON_AS_ASCII=False,               # preserva acentuação
+    JSON_AS_ASCII=False,                # preserva acentuação
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
     # Engine options para conexões estáveis no Railway
     SQLALCHEMY_ENGINE_OPTIONS={
