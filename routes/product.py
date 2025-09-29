@@ -28,8 +28,8 @@ def get_produto_detalhes():
             400,
         )
 
+    # -- monta filtro, priorizando os mais precisos --
     filtro = {}
-    # Priorize filtros mais precisos
     if codigo_referencia:
         filtro["codigoReferencia"] = codigo_referencia
     if marca:
@@ -39,33 +39,61 @@ def get_produto_detalhes():
     if nome_produto:
         filtro["nomeProduto"] = nome_produto
 
-    # A função buscar_produtos já lida com o dicionário de filtro,
-    # então basta passar o filtro aprimorado
+    # chama a busca externa
     resp = search_service_instance.buscar_produtos(
         request.token, filtro_produto=filtro, itens_por_pagina=50
     )
-    itens = (resp or {}).get("pageResult", {}).get("data", [])
+    itens = (resp or {}).get("pageResult", {}).get("data", []) or []
     if not itens:
         return jsonify({"success": False, "error": "Produto não encontrado."}), 404
 
-    escolhido = None
+    # --- NOVO: extrator de score por ID a partir da lista "itens" (brutos) ---
+    def _score_map(lista):
+        """
+        Aceita os dois formatos que a API pode devolver:
+          1) {"score": 2.0, "data": {"id": 10915, ...}}
+          2) {"id": 10915, "score": 2.0, ...}  # fallback
+        Retorna: { id:int -> score: float|None }
+        """
+        mapa = {}
+        for it in lista:
+            if not isinstance(it, dict):
+                continue
+            d = it.get("data")
+            if isinstance(d, dict) and d.get("id") is not None:
+                mapa[d["id"]] = it.get("score")
+            else:
+                if it.get("id") is not None and "score" in it:
+                    mapa[it["id"]] = it.get("score")
+        return mapa
+
+    score_by_id = _score_map(itens)
+
+    # seleciona o item (preferindo o id)
+    escolhido_data = None
     if produto_id:
         for it in itens:
             data = it.get("data", {})
             if str(data.get("id")) == str(produto_id):
-                escolhido = data
+                escolhido_data = data
                 break
-    if not escolhido:
-        escolhido = itens[0].get("data", {})
+    if not escolhido_data:
+        escolhido_data = itens[0].get("data", {})
 
-    detalhes_item = processar_item(escolhido)
+    # processa para o formato consumido pelo front
+    detalhes_item = processar_item(escolhido_data)
+
+    # --- NOVO: injeta o score no item (None quando não existir) ---
+    escolhido_id = detalhes_item.get("id") or escolhido_data.get("id")
+    detalhes_item["score"] = score_by_id.get(escolhido_id)
 
     # Fallback defensivo: se por algum motivo não vierem os campos de preço, calculamos aqui
     if "preco" not in detalhes_item or "precoOriginal" not in detalhes_item:
-        detalhes_item.update(_calcular_precos_simulados(escolhido))
+        detalhes_item.update(_calcular_precos_simulados(escolhido_data))
 
-    detalhes_similares = processar_similares(escolhido)
+    detalhes_similares = processar_similares(escolhido_data)
     return jsonify({"item": detalhes_item, "similares": detalhes_similares})
+
 
 
 @product_bp.route("/salvar_produto", methods=["POST"])
