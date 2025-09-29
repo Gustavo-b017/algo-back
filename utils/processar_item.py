@@ -2,6 +2,7 @@
 import hashlib
 import random
 
+
 def _calcular_precos_simulados(produto: dict):
     """
     Gera preços determinísticos por produto.
@@ -37,42 +38,64 @@ def _calcular_precos_simulados(produto: dict):
     }
 
 
+# >>> NOVO: métricas determinísticas (estáveis por id/nome) <<<
+def _gerar_metricas_fake(produto: dict):
+    seed_str = str(produto.get("id") or produto.get("nomeProduto") or "SEM_ID")
+    base = int(hashlib.md5(seed_str.encode("utf-8")).hexdigest()[:8], 16)
+    rng = random.Random(base + 42)
+    return {
+        "avaliacao_media": round(rng.uniform(3.2, 5.0), 1),
+        "avaliacoes": rng.randint(5, 480),
+        "vendidos": rng.randint(0, 12000),
+    }
+
+
+
 def processar_item(produto):
-    aplicacoes = [{
-        "carroceria": app.get("carroceria"),
-        "cilindros": app.get("cilindros"),
-        "combustivel": app.get("combustivel"),
-        "fabricacaoFinal": app.get("fabricacaoFinal"),
-        "fabricacaoInicial": app.get("fabricacaoInicial"),
-        "hp": app.get("hp"),
-        "id": app.get("id"),
-        "linha": app.get("linha"),
-        "modelo": app.get("modelo"),
-        "montadora": app.get("montadora"),
-        "versao": app.get("versao"),
-        "geracao": app.get("geracao"),
-        "imagem": app.get("imagem"),
-        "motor": app.get("motor")
-    } for app in produto.get("aplicacoes", [])]
+    aplicacoes = [
+        {
+            "carroceria": app.get("carroceria"),
+            "cilindros": app.get("cilindros"),
+            "combustivel": app.get("combustivel"),
+            "fabricacaoFinal": app.get("fabricacaoFinal"),
+            "fabricacaoInicial": app.get("fabricacaoInicial"),
+            "hp": app.get("hp"),
+            "id": app.get("id"),
+            "linha": app.get("linha"),
+            "modelo": app.get("modelo"),
+            "montadora": app.get("montadora"),
+            "versao": app.get("versao"),
+            "geracao": app.get("geracao"),
+            "imagem": app.get("imagem"),
+            "motor": app.get("motor"),
+        }
+        for app in produto.get("aplicacoes", [])
+    ]
 
     familia = produto.get("familia", {})
-    familia_obj = {
-        "descricao": familia.get("descricao"),
-        "id": familia.get("id"),
-        "subFamiliaDescricao": familia.get("subFamilia", {}).get("descricao")
-    } if familia else {}
+    familia_obj = (
+        {
+            "descricao": familia.get("descricao"),
+            "id": familia.get("id"),
+            "subFamiliaDescricao": familia.get("subFamilia", {}).get("descricao"),
+        }
+        if familia
+        else {}
+    )
 
     precos = _calcular_precos_simulados(produto)
+    metricas = _gerar_metricas_fake(produto)   # <<< NOVO
 
     return {
         "nomeProduto": produto.get("nomeProduto"),
         "id": produto.get("id"),
         "marca": produto.get("marca"),
-        "codigoReferencia": produto.get("codigoReferencia"), # <--- LINHA ADICIONADA
+        "codigoReferencia": produto.get("codigoReferencia"),
         "imagemReal": produto.get("imagemReal"),
         "logomarca": produto.get("logoMarca"),
         "score": produto.get("score"),
         "aplicacoes": aplicacoes,
         "familia": familia_obj,
-        **precos
+        **precos,
+        **metricas,  # <<< NOVO
     }

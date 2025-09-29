@@ -20,11 +20,12 @@ class Produto(db.Model):
     nome = db.Column(db.String(255), nullable=False)
     codigo_referencia = db.Column(db.String(100), nullable=False)
     url_imagem = db.Column(db.String(255), nullable=True)
-    preco_original = db.Column(db.Float, nullable=False)
-    preco_final = db.Column(db.Float, nullable=False)
-    desconto = db.Column(db.Float, nullable=True)
+    preco_original = db.Column(db.Numeric(10,2), nullable=False)
+    preco_final = db.Column(db.Numeric(10,2), nullable=False)
+    desconto = db.Column(db.Numeric(10,2), nullable=True)
     marca = db.Column(db.String(100), nullable=False)
     quantidade = db.Column(db.Integer, nullable=False, default=1)  # <-- NOVA COLUNA
+    
 
     def to_dict(self):
         return {

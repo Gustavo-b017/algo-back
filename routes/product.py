@@ -15,84 +15,120 @@ product_bp = Blueprint("product", __name__)
 @product_bp.route("/produto_detalhes", methods=["GET"])
 @require_token
 def get_produto_detalhes():
+    # NÃO remove esses imports locais; evitam import cycles durante testes
+    from utils.processar_item import processar_item, _calcular_precos_simulados
+    from utils.processar_similares import processar_similares
+
     produto_id = request.args.get("id", type=int)
     nome_produto = (request.args.get("nomeProduto") or "").strip()
+    codigo_referencia = (request.args.get("codigoReferencia") or "").strip()
+    marca = (request.args.get("marca") or "").strip()
 
-    # NOVO: Adicione o codigo de referencia e marca
-    codigo_referencia = request.args.get("codigoReferencia", "").strip()
-    marca = request.args.get("marca", "").strip()
+    if not produto_id and not nome_produto and not codigo_referencia:
+        return jsonify({"success": False, "error": "Informe 'id', 'nomeProduto' ou 'codigoReferencia'."}), 400
 
-    if not produto_id and not nome_produto:
-        return (
-            jsonify({"success": False, "error": "Informe 'id' ou 'nomeProduto'."}),
-            400,
-        )
+    svc = search_service_instance
+    token = request.token
 
-    # -- monta filtro, priorizando os mais precisos --
-    filtro = {}
-    if codigo_referencia:
-        filtro["codigoReferencia"] = codigo_referencia
-    if marca:
-        filtro["nomeFabricante"] = marca
-    if produto_id:
-        filtro["id"] = produto_id
-    if nome_produto:
-        filtro["nomeProduto"] = nome_produto
-
-    # chama a busca externa
-    resp = search_service_instance.buscar_produtos(
-        request.token, filtro_produto=filtro, itens_por_pagina=50
-    )
-    itens = (resp or {}).get("pageResult", {}).get("data", []) or []
-    if not itens:
-        return jsonify({"success": False, "error": "Produto não encontrado."}), 404
-
-    # --- NOVO: extrator de score por ID a partir da lista "itens" (brutos) ---
+    # ---------- helpers ----------
     def _score_map(lista):
-        """
-        Aceita os dois formatos que a API pode devolver:
-          1) {"score": 2.0, "data": {"id": 10915, ...}}
-          2) {"id": 10915, "score": 2.0, ...}  # fallback
-        Retorna: { id:int -> score: float|None }
-        """
         mapa = {}
-        for it in lista:
+        for it in lista or []:
             if not isinstance(it, dict):
                 continue
             d = it.get("data")
             if isinstance(d, dict) and d.get("id") is not None:
                 mapa[d["id"]] = it.get("score")
-            else:
-                if it.get("id") is not None and "score" in it:
-                    mapa[it["id"]] = it.get("score")
+            elif it.get("id") is not None and "score" in it:
+                mapa[it["id"]] = it.get("score")
         return mapa
 
-    score_by_id = _score_map(itens)
+    def _escolher_item(itens, pid=None, cod=None, nome=None):
+        """Retorna (data_escolhida, score) usando ordem de match: id -> codigo -> nome -> primeiro."""
+        if not itens:
+            return None, None
+        s_map = _score_map(itens)
+        # normaliza lista em 'datas'
+        datas = [(it.get("data") if isinstance(it, dict) else it) or {} for it in itens]
 
-    # seleciona o item (preferindo o id)
-    escolhido_data = None
+        if pid is not None:
+            for d in datas:
+                if str(d.get("id")) == str(pid):
+                    return d, s_map.get(d.get("id"))
+        if cod:
+            for d in datas:
+                if (d.get("codigoReferencia") or "").strip().upper() == cod.strip().upper():
+                    return d, s_map.get(d.get("id"))
+        if nome:
+            nome_norm = nome.strip().lower()
+            for d in datas:
+                if (d.get("nomeProduto") or "").strip().lower() == nome_norm:
+                    return d, s_map.get(d.get("id"))
+        d = datas[0]
+        return d, s_map.get(d.get("id"))
+
+    # ---------- ordem de tentativas ----------
+    # 1) código + marca (mais preciso)
+    # 2) nome + marca
+    # 3) id (nem sempre suportado pelo provider, mas tentamos)
+    # 4) sumário (superbusca) SOMENTE se houver nome ou código
+    tentativas = []
+
+    if codigo_referencia:
+        f = {"codigoReferencia": codigo_referencia}
+        if marca:
+            f["nomeFabricante"] = marca
+        tentativas.append(("query", f))
+
+    if nome_produto:
+        f = {"nomeProduto": nome_produto}
+        if marca:
+            f["nomeFabricante"] = marca
+        tentativas.append(("query", f))
+
     if produto_id:
-        for it in itens:
-            data = it.get("data", {})
-            if str(data.get("id")) == str(produto_id):
-                escolhido_data = data
-                break
-    if not escolhido_data:
-        escolhido_data = itens[0].get("data", {})
+        f = {"id": produto_id}
+        if marca:
+            f["nomeFabricante"] = marca
+        tentativas.append(("query", f))
 
-    # processa para o formato consumido pelo front
+    termo_sumario = nome_produto or codigo_referencia
+    if termo_sumario:  # NÃO tenta sumário com id puro
+        tentativas.append(("sumario", {"superbusca": termo_sumario}))
+
+    # ---------- execução ----------
+    escolhido_data = None
+    score_escolhido = None
+
+    for modo, filtro in tentativas:
+        if modo == "query":
+            resp = svc.buscar_produtos(token, filtro_produto=filtro, itens_por_pagina=200)
+            itens = (resp or {}).get("pageResult", {}).get("data", []) or []
+        else:
+            resp = svc.buscar_sugestoes_sumario(token, termo_busca=filtro["superbusca"], itens_por_pagina=200)
+            itens = (resp or {}).get("pageResult", {}).get("data", []) or []
+
+        if itens:
+            escolhido_data, score_escolhido = _escolher_item(itens, pid=produto_id, cod=codigo_referencia, nome=nome_produto)
+            if escolhido_data:
+                break
+
+    if not escolhido_data:
+        return jsonify({"success": False, "error": "Produto não encontrado."}), 404
+
+    # ---------- montagem do payload ----------
     detalhes_item = processar_item(escolhido_data)
 
-    # --- NOVO: injeta o score no item (None quando não existir) ---
-    escolhido_id = detalhes_item.get("id") or escolhido_data.get("id")
-    detalhes_item["score"] = score_by_id.get(escolhido_id)
-
-    # Fallback defensivo: se por algum motivo não vierem os campos de preço, calculamos aqui
+    # garante preços se o processar_item não trouxe
     if "preco" not in detalhes_item or "precoOriginal" not in detalhes_item:
         detalhes_item.update(_calcular_precos_simulados(escolhido_data))
 
+    # injeta score (quando vier do sumário/query)
+    if detalhes_item.get("score") is None:
+        detalhes_item["score"] = score_escolhido
+
     detalhes_similares = processar_similares(escolhido_data)
-    return jsonify({"item": detalhes_item, "similares": detalhes_similares})
+    return jsonify({"item": detalhes_item, "similares": detalhes_similares}), 200
 
 
 
