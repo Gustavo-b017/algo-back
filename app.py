@@ -3,19 +3,22 @@ import os
 import logging
 from urllib.parse import quote_plus
 
-# Carrega .env de forma robusta (sem find_dotenv)
+# app.py
+import os
+
 def _load_env():
-    from dotenv import load_dotenv
+    # Carrega .env localmente; se o pacote não existir (prod), ignora.
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return  # em produção o Railway injeta as ENVs; seguir sem .env
+
     base_dir = os.path.abspath(os.path.dirname(__file__))
-    # tenta .env na raiz do projeto (mesmo dir do app.py)
     env_path = os.path.join(base_dir, ".env")
     if os.path.isfile(env_path):
         load_dotenv(env_path, override=True)
     else:
-        # fallback: tenta a partir do CWD (útil em alguns runners)
         load_dotenv(override=True)
-
-_load_env()
 
 from flask import Flask, jsonify
 from flask_cors import CORS
