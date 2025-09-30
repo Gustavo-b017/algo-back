@@ -171,3 +171,14 @@ class SearchService:
 
 # instância única
 search_service_instance = SearchService()
+
+def buscar_produtos_filhos(self, token, filtro_produto=None, filtro_veiculo=None, pagina=0, itens_por_pagina=50):
+    """Busca produtos (v2) filhos, refinando por último nível etc."""
+    url = f"{self.base_url}/catalogo/v2/produtos-filhos/query"
+    payload = {
+        "produtoFiltro": filtro_produto or {},
+        "veiculoFiltro": filtro_veiculo or {},
+        "pagina": pagina,
+        "itensPorPagina": itens_por_pagina
+    }
+    return self._post_request(url, token, payload)
