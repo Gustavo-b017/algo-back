@@ -27,7 +27,7 @@ from database.__init__ import db
 from database.models import Usuario, Produto
 from routes.search import search_bp
 from routes.product import product_bp
-
+from routes.auth import auth_bp
 
 # -----------------------------------------------------------------------------
 # Criação da app
@@ -120,6 +120,7 @@ if os.getenv("CREATE_SCHEMA") == "1":
 # -----------------------------------------------------------------------------
 app.register_blueprint(search_bp)
 app.register_blueprint(product_bp)
+app.register_blueprint(auth_bp, url_prefix="/auth")
 
 
 # -----------------------------------------------------------------------------

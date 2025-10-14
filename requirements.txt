@@ -8,3 +8,6 @@ geopy
 mysql-connector-python
 Flask-SQLAlchemy
 gunicorn
+python-dotenv
+PyJWT
+passlib[bcrypt]
