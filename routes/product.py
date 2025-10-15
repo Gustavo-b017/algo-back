@@ -9,6 +9,8 @@ from services.search_service import search_service_instance
 from database.__init__ import db
 from database.models import Produto
 
+from decorators.auth_decorator import login_required
+
 product_bp = Blueprint("product", __name__)
 
 
@@ -25,7 +27,15 @@ def get_produto_detalhes():
     marca = (request.args.get("marca") or "").strip()
 
     if not produto_id and not nome_produto and not codigo_referencia:
-        return jsonify({"success": False, "error": "Informe 'id', 'nomeProduto' ou 'codigoReferencia'."}), 400
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Informe 'id', 'nomeProduto' ou 'codigoReferencia'.",
+                }
+            ),
+            400,
+        )
 
     svc = search_service_instance
     token = request.token
@@ -57,7 +67,9 @@ def get_produto_detalhes():
                     return d, s_map.get(d.get("id"))
         if cod:
             for d in datas:
-                if (d.get("codigoReferencia") or "").strip().upper() == cod.strip().upper():
+                if (
+                    d.get("codigoReferencia") or ""
+                ).strip().upper() == cod.strip().upper():
                     return d, s_map.get(d.get("id"))
         if nome:
             nome_norm = nome.strip().lower()
@@ -102,14 +114,20 @@ def get_produto_detalhes():
 
     for modo, filtro in tentativas:
         if modo == "query":
-            resp = svc.buscar_produtos(token, filtro_produto=filtro, itens_por_pagina=200)
+            resp = svc.buscar_produtos(
+                token, filtro_produto=filtro, itens_por_pagina=200
+            )
             itens = (resp or {}).get("pageResult", {}).get("data", []) or []
         else:
-            resp = svc.buscar_sugestoes_sumario(token, termo_busca=filtro["superbusca"], itens_por_pagina=200)
+            resp = svc.buscar_sugestoes_sumario(
+                token, termo_busca=filtro["superbusca"], itens_por_pagina=200
+            )
             itens = (resp or {}).get("pageResult", {}).get("data", []) or []
 
         if itens:
-            escolhido_data, score_escolhido = _escolher_item(itens, pid=produto_id, cod=codigo_referencia, nome=nome_produto)
+            escolhido_data, score_escolhido = _escolher_item(
+                itens, pid=produto_id, cod=codigo_referencia, nome=nome_produto
+            )
             if escolhido_data:
                 break
 
@@ -131,24 +149,24 @@ def get_produto_detalhes():
     return jsonify({"item": detalhes_item, "similares": detalhes_similares}), 200
 
 
-
 @product_bp.route("/salvar_produto", methods=["POST"])
-@require_token
+@login_required  # Mude de @require_token para @login_required
 def salvar_produto():
     dados = request.get_json()
     if not dados or not dados.get("id_api_externa"):
         return jsonify({"success": False, "error": "Dados inválidos"}), 400
 
-    # Captura a quantidade do corpo da requisição, com 1 como padrão
     quantidade_para_adicionar = dados.get("quantidade", 1)
+    # Pega o ID do usuário logado que o decorador injetou
+    usuario_id_logado = request.current_user.id
 
     try:
+        # Busca o produto no carrinho DO USUÁRIO ATUAL
         produto_existente = Produto.query.filter_by(
-            id_api_externa=dados["id_api_externa"]
+            id_api_externa=dados["id_api_externa"], usuario_id=usuario_id_logado
         ).first()
 
         if produto_existente:
-            # Se existe, incrementa a quantidade com o valor recebido
             produto_existente.quantidade += quantidade_para_adicionar
             db.session.commit()
             return (
@@ -161,8 +179,8 @@ def salvar_produto():
                 200,
             )
         else:
-            # Se não existe, cria um novo registro com a quantidade especificada
             novo_produto = Produto(
+                usuario_id=usuario_id_logado,  # Associa o produto ao usuário
                 id_api_externa=dados["id_api_externa"],
                 nome=dados["nome"],
                 codigo_referencia=dados["codigo_referencia"],
@@ -171,7 +189,7 @@ def salvar_produto():
                 preco_final=float(dados.get("preco_final", 0.0)),
                 desconto=float(dados.get("desconto", 0.0)),
                 marca=dados["marca"],
-                quantidade=quantidade_para_adicionar,  # Define a quantidade inicial
+                quantidade=quantidade_para_adicionar,
             )
             db.session.add(novo_produto)
             db.session.commit()
@@ -184,6 +202,7 @@ def salvar_produto():
 
     except Exception as e:
         db.session.rollback()
+        db.session.rollback()
         print(f"Erro ao salvar produto: {e}")
         return (
             jsonify(
@@ -194,11 +213,11 @@ def salvar_produto():
 
 
 @product_bp.route("/carrinho", methods=["GET"])
-@require_token
+@login_required # Mude de @require_token para @login_required
 def get_produtos_carrinho():
     try:
-        produtos = Produto.query.all()
-        # Agora podemos voltar a usar o to_dict() de forma limpa!
+        # Busca apenas os produtos do usuário logado
+        produtos = Produto.query.filter_by(usuario_id=request.current_user.id).all()
         produtos_json = [p.to_dict() for p in produtos]
         return jsonify({"success": True, "produtos": produtos_json}), 200
     except Exception as e:
@@ -207,24 +226,22 @@ def get_produtos_carrinho():
 
 
 @product_bp.route("/carrinho/produto/remover", methods=["POST"])
-@require_token
+@login_required # Mude de @require_token para @login_required
 def remover_produto_carrinho():
     dados = request.get_json()
     if not dados or "id_api_externa" not in dados:
         return jsonify({"success": False, "error": "ID do produto não fornecido."}), 400
 
     try:
+        # Busca o produto para remover NO CARRINHO DO USUÁRIO ATUAL
         produto_para_remover = Produto.query.filter_by(
-            id_api_externa=dados["id_api_externa"]
+            id_api_externa=dados["id_api_externa"],
+            usuario_id=request.current_user.id
         ).first()
 
         if not produto_para_remover:
-            return (
-                jsonify(
-                    {"success": False, "error": "Produto não encontrado no carrinho."}
-                ),
-                404,
-            )
+            return jsonify({"success": False, "error": "Produto não encontrado no carrinho."}), 404
+        
 
         db.session.delete(produto_para_remover)
         db.session.commit()
@@ -240,20 +257,8 @@ def remover_produto_carrinho():
 
 
 @product_bp.route("/carrinho/produto/atualizar-quantidade", methods=["POST"])
-@require_token
+@login_required 
 def atualizar_quantidade_produto():
-    """
-    Atualiza a quantidade de um produto no carrinho.
-    Body JSON:
-      {
-        "id_api_externa": <int>,
-        "quantidade": <int>   # nova quantidade absoluta
-      }
-    Regras:
-      - Se quantidade <= 0: remove o produto do carrinho.
-      - Se produto não existir: 404.
-      - Retorna o produto atualizado (quando aplicável).
-    """
     dados = request.get_json() or {}
     id_api_externa = dados.get("id_api_externa")
     quantidade = dados.get("quantidade")
@@ -270,14 +275,15 @@ def atualizar_quantidade_produto():
         return jsonify({"success": False, "error": "Quantidade inválida."}), 400
 
     try:
-        produto = Produto.query.filter_by(id_api_externa=id_api_externa).first()
+        # Busca o produto para atualizar NO CARRINHO DO USUÁRIO ATUAL
+        produto = Produto.query.filter_by(
+            id_api_externa=dados.get("id_api_externa"),
+            usuario_id=request.current_user.id
+        ).first()
+        
         if not produto:
-            return (
-                jsonify(
-                    {"success": False, "error": "Produto não encontrado no carrinho."}
-                ),
-                404,
-            )
+            return jsonify({"success": False, "error": "Produto não encontrado no carrinho."}), 404
+            
 
         if quantidade <= 0:
             db.session.delete(produto)
