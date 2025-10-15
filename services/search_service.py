@@ -10,7 +10,8 @@ from urllib3.util.retry import Retry
 log = logging.getLogger(__name__)
 
 TTL_LONGO = 12 * 60 * 60  # 12h
-DEFAULT_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "10"))
+# AUMENTE O TIMEOUT PADRÃO DE 10 PARA 30 SEGUNDOS
+DEFAULT_TIMEOUT = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "30.0"))
 
 class SearchService:
     def __init__(self):
