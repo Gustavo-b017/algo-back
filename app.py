@@ -93,14 +93,18 @@ app.config.update(
 # Extensões (CORS e Compress)
 # -----------------------------------------------------------------------------
 # CORS: por default libera localhost:5173 e teu domínio Vercel; pode sobrescrever por ENV
-_default_origins = "http://localhost:5173,https://algo-front-kohl.vercel.app"
-origins = [o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
-CORS(app, resources={r"/*": {"origins": origins, "supports_credentials": True}})
+# _default_origins = "http://localhost:5173,https://algo-front-kohl.vercel.app"
+# origins = [o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
+# CORS(app, resources={r"/*": {"origins": origins, "supports_credentials": True}})
+
+# # Compress: útil para JSON; mantém default sem exageros
+# app.config.setdefault("COMPRESS_MIMETYPES", ["application/json", "text/json", "text/plain"])
+# Compress(app)
+CORS(app, resources={r"/*": {"origins": "*", "supports_credentials": True}})
 
 # Compress: útil para JSON; mantém default sem exageros
 app.config.setdefault("COMPRESS_MIMETYPES", ["application/json", "text/json", "text/plain"])
 Compress(app)
-
 
 # -----------------------------------------------------------------------------
 # Banco (init)
