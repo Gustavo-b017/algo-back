@@ -8,7 +8,7 @@ from decorators.auth_decorator import login_required
 auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.route("/register", methods=["POST"])
+@auth_bp.route("/auth/register", methods=["POST"])
 def register():
     data = request.get_json(force=True, silent=True) or {}
     nome = (data.get("nome") or "").strip()

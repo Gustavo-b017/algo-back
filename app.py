@@ -24,7 +24,6 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_compress import Compress
 from database.__init__ import db
-from database.models import Usuario, Produto
 from routes.search import search_bp
 from routes.product import product_bp
 from routes.auth import auth_bp
@@ -93,18 +92,14 @@ app.config.update(
 # Extensões (CORS e Compress)
 # -----------------------------------------------------------------------------
 # CORS: por default libera localhost:5173 e teu domínio Vercel; pode sobrescrever por ENV
-# _default_origins = "http://localhost:5173,https://algo-front-kohl.vercel.app"
-# origins = [o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
-# CORS(app, resources={r"/*": {"origins": origins, "supports_credentials": True}})
-
-# # Compress: útil para JSON; mantém default sem exageros
-# app.config.setdefault("COMPRESS_MIMETYPES", ["application/json", "text/json", "text/plain"])
-# Compress(app)
-CORS(app, resources={r"/*": {"origins": "*", "supports_credentials": True}})
+_default_origins = "http://localhost:5173,https://algo-front-kohl.vercel.app"
+origins = [o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
+CORS(app, resources={r"/*": {"origins": origins, "supports_credentials": True}})
 
 # Compress: útil para JSON; mantém default sem exageros
 app.config.setdefault("COMPRESS_MIMETYPES", ["application/json", "text/json", "text/plain"])
 Compress(app)
+
 
 # -----------------------------------------------------------------------------
 # Banco (init)
@@ -124,7 +119,7 @@ if os.getenv("CREATE_SCHEMA") == "1":
 # -----------------------------------------------------------------------------
 app.register_blueprint(search_bp)
 app.register_blueprint(product_bp)
-app.register_blueprint(auth_bp, url_prefix="/auth")
+app.register_blueprint(auth_bp)
 
 
 # -----------------------------------------------------------------------------
