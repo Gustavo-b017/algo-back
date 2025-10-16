@@ -1,29 +1,17 @@
-# utils/security.py
-import os, datetime, jwt
-from passlib.context import CryptContext
-from flask import current_app
+# utils/security.py (exemplo seguro e leve)
+from datetime import datetime, timedelta, timezone
+from werkzeug.security import generate_password_hash, check_password_hash
+import jwt, os
 
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
-_ALG = "HS256"
+SECRET = os.getenv("SECRET_KEY", "change-me")
+ALGO = "HS256"
 
-def _get_secret():
-    # pega da config do Flask se existir; senão do env; fallback fixo
-    return (getattr(current_app, "config", {}) or {}).get("JWT_SECRET") or os.getenv("JWT_SECRET", "dev-secret")
+def hash_password(p: str) -> str:
+    return generate_password_hash(p, method="pbkdf2:sha256", salt_length=16)
 
-def hash_password(raw: str) -> str:
-    return _pwd.hash(raw)
+def verify_password(p: str, h: str) -> bool:
+    return check_password_hash(h, p)
 
-def verify_password(raw: str, hashed: str) -> bool:
-    return _pwd.verify(raw, hashed)
-
-def create_access_token(user_id: int, minutes: int = 60*24*7) -> str:
-    now = datetime.datetime.utcnow()
-    payload = {
-        "sub": str(user_id),                 # <<< AQUI: string!
-        "iat": now,
-        "exp": now + datetime.timedelta(minutes=minutes),
-    }
-    return jwt.encode(payload, _get_secret(), algorithm=_ALG)
-
-def decode_token(token: str) -> dict:
-    return jwt.decode(token, _get_secret(), algorithms=[_ALG])
+def create_access_token(user_id: int, hours: int = 12) -> str:
+    payload = {"sub": user_id, "exp": datetime.now(timezone.utc) + timedelta(hours=hours)}
+    return jwt.encode(payload, SECRET, algorithm=ALGO)
