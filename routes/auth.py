@@ -8,29 +8,28 @@ from decorators.auth_decorator import login_required
 auth_bp = Blueprint("auth", __name__)
 
 
-@auth_bp.route("/auth/register", methods=["POST"])
+@auth_bp.route("/register", methods=["POST"])
 def register():
-    # data = request.get_json(force=True, silent=True) or {}
-    # nome = (data.get("nome") or "").strip()
-    # email = (data.get("email") or "").strip().lower()
-    # senha = data.get("senha") or ""
+    data = request.get_json(force=True, silent=True) or {}
+    nome = (data.get("nome") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    senha = data.get("senha") or ""
 
-    # if not nome or not email or not senha:
-    #     return jsonify({"success": False, "error": "nome, email e senha são obrigatórios."}), 400
+    if not nome or not email or not senha:
+        return jsonify({"success": False, "error": "nome, email e senha são obrigatórios."}), 400
 
-    # if db.session.query(Usuario).filter_by(email=email).first():
-    #     return jsonify({"success": False, "error": "Email já cadastrado."}), 409
+    if db.session.query(Usuario).filter_by(email=email).first():
+        return jsonify({"success": False, "error": "Email já cadastrado."}), 409
 
-    # user = Usuario(
-    #     nome=nome,
-    #     email=email,
-    #     password_hash=hash_password(senha),
-    # )
-    # db.session.add(user)
-    # db.session.commit()
+    user = Usuario(
+        nome=nome,
+        email=email,
+        password_hash=hash_password(senha),
+    )
+    db.session.add(user)
+    db.session.commit()
 
-    # return jsonify({"success": True, "user": user.to_public_dict()}), 201
-    return "registro ativo", 200
+    return jsonify({"success": True, "user": user.to_public_dict()}), 201
 
 
 @auth_bp.route("/login", methods=["POST"])
