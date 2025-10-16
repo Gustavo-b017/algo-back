@@ -2,17 +2,22 @@
 import os
 import logging
 from urllib.parse import quote_plus
+from flask import Flask, jsonify, request, make_response
+from flask_cors import CORS
+from flask_compress import Compress
+from database.__init__ import db
+from routes.search import search_bp
+from routes.product import product_bp
+from routes.auth import auth_bp
 
-# app.py
-import os
-
+# -----------------------------------------------------------------------------
+# .env local (dev). Em produção o Railway injeta as ENVs.
+# -----------------------------------------------------------------------------
 def _load_env():
-    # Carrega .env localmente; se o pacote não existir (prod), ignora.
     try:
         from dotenv import load_dotenv
     except ImportError:
-        return  # em produção o Railway injeta as ENVs; seguir sem .env
-
+        return
     base_dir = os.path.abspath(os.path.dirname(__file__))
     env_path = os.path.join(base_dir, ".env")
     if os.path.isfile(env_path):
@@ -20,41 +25,24 @@ def _load_env():
     else:
         load_dotenv(override=True)
 
-from flask import Flask, jsonify
-from flask_cors import CORS
-from flask_compress import Compress
-from database.__init__ import db
-from database.models import Usuario, Produto
-from routes.search import search_bp
-from routes.product import product_bp
-from routes.auth import auth_bp
+_load_env()
 
 # -----------------------------------------------------------------------------
-# Criação da app
+# App / logging
 # -----------------------------------------------------------------------------
 app = Flask(__name__)
-
-# -----------------------------------------------------------------------------
-# Logging básico (legível e configurável por ENV)
-# -----------------------------------------------------------------------------
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 log = logging.getLogger(__name__)
 
-
 # -----------------------------------------------------------------------------
-# Configuração do Banco (Railway ou local)
+# DB URI (Railway ou local)
 # -----------------------------------------------------------------------------
 def _build_db_uri() -> str:
-    """
-    Monta a URI do MySQL a partir das ENVs do Railway ou usa fallback local.
-    Faz escapes seguros na senha (caso tenha '@', '#', etc.).
-    """
     if os.getenv("MYSQLHOST"):
-        # Em produção (Railway), trate todas como obrigatórias
         host = os.getenv("MYSQLHOST")
         user = os.getenv("MYSQLUSER")
         password = os.getenv("MYSQLPASSWORD")
-        database = os.getenv("MYSQLDATABASE")
+        database = os.getenv("MYSQLDATABASE")  # <- SEM underscore
         port = os.getenv("MYSQLPORT", "3306")
 
         missing = [k for k, v in {
@@ -63,57 +51,61 @@ def _build_db_uri() -> str:
         if missing:
             raise RuntimeError(f"Variáveis de ambiente ausentes para o DB: {', '.join(missing)}")
 
-        # Escapa a senha para a URI
         pwd = quote_plus(password)
         return f"mysql+mysqlconnector://{user}:{pwd}@{host}:{port}/{database}"
 
-    # Fallback local (mantive teu default)
     return os.getenv("DATABASE_URL", "mysql+mysqlconnector://root@localhost/ancora_teste")
 
-
 db_url = _build_db_uri()
-
-app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config.update(
-    JSON_SORT_KEYS=False,               # não reordena chaves de JSON (mantém tua ordem)
-    JSON_AS_ASCII=False,                # preserva acentuação
+    SQLALCHEMY_DATABASE_URI=db_url,
+    JSON_SORT_KEYS=False,
+    JSON_AS_ASCII=False,
     SQLALCHEMY_TRACK_MODIFICATIONS=False,
-    # Engine options para conexões estáveis no Railway
     SQLALCHEMY_ENGINE_OPTIONS={
-        "pool_pre_ping": True,         # evita "MySQL server has gone away"
-        "pool_recycle": 280,           # recicla antes do timeout comum de 300s
-        # Descomente/ajuste se precisar tunar:
-        # "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
-        # "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "10")),
+        "pool_pre_ping": True,
+        "pool_recycle": 280,
     },
 )
 
-
 # -----------------------------------------------------------------------------
-# Extensões (CORS e Compress)
+# CORS + Compress (com fallback manual para erros 500)
 # -----------------------------------------------------------------------------
-# CORS: por default libera localhost:5173 e teu domínio Vercel; pode sobrescrever por ENV
 _default_origins = "http://localhost:5173,https://algo-front-kohl.vercel.app"
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
 CORS(app, resources={r"/*": {"origins": origins, "supports_credentials": True}})
-
-# Compress: útil para JSON; mantém default sem exageros
 app.config.setdefault("COMPRESS_MIMETYPES", ["application/json", "text/json", "text/plain"])
 Compress(app)
 
+def _add_cors_headers(resp):
+    origin = request.headers.get("Origin")
+    if origin and origin in origins:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Vary"] = "Origin"
+        resp.headers["Access-Control-Allow-Credentials"] = "true"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return resp
+
+@app.before_request
+def _preflight():
+    if request.method == "OPTIONS":
+        return _add_cors_headers(make_response("", 204))
+
+@app.after_request
+def _after(resp):
+    return _add_cors_headers(resp)
 
 # -----------------------------------------------------------------------------
-# Banco (init)
+# DB init + criação opcional do schema (USE UMA VEZ)
 # -----------------------------------------------------------------------------
+from database.models import Usuario, Produto  # importa modelos
+
 db.init_app(app)
-
-# (Opcional) Em dev, você pode querer auto-criar as tabelas.
-# Use CREATE_SCHEMA=1 para habilitar.
 if os.getenv("CREATE_SCHEMA") == "1":
     with app.app_context():
         db.create_all()
-        log.info("Schema criado/validado (dev).")
-
+        log.info("Schema criado/validado (dev/prod).")
 
 # -----------------------------------------------------------------------------
 # Blueprints
@@ -122,35 +114,26 @@ app.register_blueprint(search_bp)
 app.register_blueprint(product_bp)
 app.register_blueprint(auth_bp, url_prefix="/auth")
 
-
 # -----------------------------------------------------------------------------
-# Rotas básicas
+# Rotas base e handlers
 # -----------------------------------------------------------------------------
 @app.route("/")
 def home():
-    return "API ativa. Acesso às rotas de busca e de produtos."
+    return "API ativa. Acesso às rotas de busca, produtos e auth."
 
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"}), 200
 
-
-# -----------------------------------------------------------------------------
-# Error handlers (JSON, discretos)
-# -----------------------------------------------------------------------------
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"success": False, "error": "Rota não encontrada."}), 404
 
-@app.errorhandler(500)
+@app.errorhandler(Exception)
 def internal_error(e):
     log.exception("Erro interno não tratado")
     return jsonify({"success": False, "error": "Erro interno do servidor."}), 500
 
-
-# -----------------------------------------------------------------------------
-# Execução
-# -----------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     debug = os.getenv("FLASK_DEBUG", "1") == "1"
