@@ -25,7 +25,6 @@ def register():
         user = Usuario(nome=nome, email=email, password_hash=hash_password(senha))
         db.session.add(user)
         db.session.commit()
-
         return jsonify({"success": True, "user": user.to_public_dict()}), 201
 
     except IntegrityError:
@@ -33,8 +32,8 @@ def register():
         return jsonify({"success": False, "error": "Email já cadastrado."}), 409
     except SQLAlchemyError as ex:
         db.session.rollback()
-        # devolve mensagem útil para você ver no front (temporariamente)
-        return jsonify({"success": False, "error": f"Erro de banco de dados: {str(ex.__class__.__name__)}"}), 500
+        # durante o ajuste, devolva a classe do erro para sabermos exatamente a causa
+        return jsonify({"success": False, "error": f"Erro de banco de dados: {ex.__class__.__name__}"}), 500
 
 @auth_bp.route("/login", methods=["POST"])
 def login():
