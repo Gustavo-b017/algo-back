@@ -16,6 +16,7 @@ search_bp = Blueprint("search", __name__)
 _FACET_CACHE = {}
 _FACET_TTL = int(os.getenv("FACET_TTL_SECONDS", "600"))  # 10 min default
 
+
 def _cache_get(key):
     rec = _FACET_CACHE.get(key)
     if not rec:
@@ -26,11 +27,14 @@ def _cache_get(key):
         return None
     return payload
 
+
 def _cache_set(key, payload, ttl=_FACET_TTL):
     _FACET_CACHE[key] = (time.time() + ttl, payload)
 
+
 def _nz(s):  # normalize string
     return (s or "").strip()
+
 
 def _score_map(itens):
     mapa = {}
@@ -51,9 +55,16 @@ def _score_map(itens):
 def get_montadoras():
     resposta_api = search_service_instance.buscar_montadoras(request.token)
     if not resposta_api:
-        return jsonify({"success": False, "error": "Não foi possível buscar as montadoras."}), 502
+        return (
+            jsonify(
+                {"success": False, "error": "Não foi possível buscar as montadoras."}
+            ),
+            502,
+        )
     data = resposta_api.get("data", [])
-    montadoras_formatado = [{"id": item.get("id"), "nome": item.get("descricao")} for item in data]
+    montadoras_formatado = [
+        {"id": item.get("id"), "nome": item.get("descricao")} for item in data
+    ]
     montadoras_ordenado = sorted(montadoras_formatado, key=lambda x: x["nome"])
     return jsonify(montadoras_ordenado)
 
@@ -63,9 +74,16 @@ def get_montadoras():
 def get_familias():
     resposta_api = search_service_instance.buscar_familias(request.token)
     if not resposta_api:
-        return jsonify({"success": False, "error": "Não foi possível buscar as famílias."}), 502
+        return (
+            jsonify(
+                {"success": False, "error": "Não foi possível buscar as famílias."}
+            ),
+            502,
+        )
     data = resposta_api.get("data", [])
-    familias_formatado = [{"id": item.get("id"), "nome": item.get("descricao")} for item in data]
+    familias_formatado = [
+        {"id": item.get("id"), "nome": item.get("descricao")} for item in data
+    ]
     familias_ordenado = sorted(familias_formatado, key=lambda x: x["nome"])
     return jsonify(familias_ordenado)
 
@@ -112,13 +130,23 @@ def facetas_produto():
       - placa (string, opcional)
     """
     token = request.token
-    produto_nome = _nz(request.args.get("produto_nome") or request.args.get("familia_nome"))
+    produto_nome = _nz(
+        request.args.get("produto_nome") or request.args.get("familia_nome")
+    )
     familia_id = request.args.get("familia_id", type=int)
     subfamilia_id = request.args.get("subfamilia_id", type=int)
     placa = _nz(request.args.get("placa"))
 
     if not produto_nome and not familia_id:
-        return jsonify({"success": False, "error": "Informe 'produto_nome' (ou 'familia_nome') ou 'familia_id'."}), 400
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Informe 'produto_nome' (ou 'familia_nome') ou 'familia_id'.",
+                }
+            ),
+            400,
+        )
 
     # Resolver nome pelo ID, se necessário
     if not produto_nome and familia_id:
@@ -129,17 +157,33 @@ def facetas_produto():
                 produto_nome = _nz(f.get("descricao"))
                 break
     if not produto_nome:
-        return jsonify({"success": False, "error": "Não foi possível resolver o nome do produto pela família."}), 400
+        return (
+            jsonify(
+                {
+                    "success": False,
+                    "error": "Não foi possível resolver o nome do produto pela família.",
+                }
+            ),
+            400,
+        )
 
     # Cache
-    cache_key = ("facets", produto_nome.lower(), str(familia_id or ""), str(subfamilia_id or ""), placa.upper())
+    cache_key = (
+        "facets",
+        produto_nome.lower(),
+        str(familia_id or ""),
+        str(subfamilia_id or ""),
+        placa.upper(),
+    )
     cached = _cache_get(cache_key)
     if cached:
         return jsonify(cached), 200
 
     # 1) Sumário (rápido)
     itens = []
-    sumario = search_service_instance.buscar_sugestoes_sumario(token, termo_busca=produto_nome, itens_por_pagina=800)
+    sumario = search_service_instance.buscar_sugestoes_sumario(
+        token, termo_busca=produto_nome, itens_por_pagina=800
+    )
     itens_sum = (sumario or {}).get("pageResult", {}).get("data", []) or []
     for it in itens_sum:
         data = it.get("data") if isinstance(it, dict) else it
@@ -152,8 +196,12 @@ def facetas_produto():
         if subfamilia_id:
             filtro_produto["ultimoNivelId"] = int(subfamilia_id)
         filtro_veiculo = {"veiculoPlaca": placa} if placa else {}
-        resp_q = search_service_instance.buscar_produtos(token, filtro_produto=filtro_produto,
-                                                         filtro_veiculo=filtro_veiculo, itens_por_pagina=1000)
+        resp_q = search_service_instance.buscar_produtos(
+            token,
+            filtro_produto=filtro_produto,
+            filtro_veiculo=filtro_veiculo,
+            itens_por_pagina=1000,
+        )
         dados_q = (resp_q or {}).get("pageResult", {}).get("data", []) or []
         for it in dados_q:
             data = it.get("data") if isinstance(it, dict) else it
@@ -167,9 +215,18 @@ def facetas_produto():
 
     # Filtrar por família/subfamília quando fornecidos
     if familia_id:
-        itens = [d for d in itens if int((d.get("familia") or {}).get("id") or -1) == int(familia_id)]
+        itens = [
+            d
+            for d in itens
+            if int((d.get("familia") or {}).get("id") or -1) == int(familia_id)
+        ]
     if subfamilia_id:
-        itens = [d for d in itens if int(((d.get("familia") or {}).get("subFamilia") or {}).get("id") or -1) == int(subfamilia_id)]
+        itens = [
+            d
+            for d in itens
+            if int(((d.get("familia") or {}).get("subFamilia") or {}).get("id") or -1)
+            == int(subfamilia_id)
+        ]
 
     subprod_cont = Counter()
     marca_cont = Counter()
@@ -193,11 +250,17 @@ def facetas_produto():
     if familia_id:
         resp_gr = search_service_instance.buscar_grupos_produtos(token)
         grupos = (resp_gr or {}).get("data", []) or []
-        validos = {(int(g.get("id")), _nz(g.get("descricao")))
-                   for g in grupos if int(((g.get("familia") or {}).get("id")) or -1) == int(familia_id)}
+        validos = {
+            (int(g.get("id")), _nz(g.get("descricao")))
+            for g in grupos
+            if int(((g.get("familia") or {}).get("id")) or -1) == int(familia_id)
+        }
         subprod_cont = Counter({k: v for k, v in subprod_cont.items() if k in validos})
 
-    subprodutos = [{"id": sid, "nome": sdesc, "qtd": qtd} for (sid, sdesc), qtd in subprod_cont.most_common()]
+    subprodutos = [
+        {"id": sid, "nome": sdesc, "qtd": qtd}
+        for (sid, sdesc), qtd in subprod_cont.most_common()
+    ]
     subprodutos.sort(key=lambda x: (-x["qtd"], x["nome"]))
 
     marcas = [{"nome": nome, "qtd": qtd} for nome, qtd in marca_cont.most_common()]
@@ -226,7 +289,10 @@ def pesquisar_produtos():
     itens_por_pagina = 15
 
     # ---------- ORDENAR ----------
-    raw_ordenar = _nz(request.args.get("ordenar_por") or request.args.get("ordenacao") or "nome").lower()
+
+    raw_ordenar = _nz(
+        request.args.get("ordenar_por") or request.args.get("ordenacao") or "nome"
+    ).lower()
     raw_ordem = _nz(request.args.get("ordem")).lower()
 
     alias = {
@@ -235,32 +301,48 @@ def pesquisar_produtos():
         "mais_bem_avaliados": "avaliacao",
         "maior_preco": "preco_desc",
         "menor_preco": "preco_asc",
+        "price": "preco",  # sinônimo eventual
     }
+
     norm = alias.get(raw_ordenar, raw_ordenar)
 
     if norm in ("preco_asc", "preco_desc"):
         ordenar_por = "preco"
-        ordem_asc = (norm == "preco_asc")
+        ordem_asc = norm == "preco_asc"
+
+    elif norm in ("preco", "price"):  # <--- NOVO: aceita preco+ordem
+        ordenar_por = "preco"
+        # se vier ordem=asc/desc usamos; senão default desc (maior preço)
+        ordem_asc = (raw_ordem == "asc") if raw_ordem in ("asc", "desc") else False
+
     elif norm in ("score", "vendidos", "avaliacao"):
         ordenar_por = norm
-        ordem_asc = (raw_ordem == "asc") if raw_ordem in ("asc", "desc") else False  # default desc
+        # default desc para métricas (relevância, vendidos, avaliação)
+        ordem_asc = (raw_ordem == "asc") if raw_ordem in ("asc", "desc") else False
+
     else:
         ordenar_por = "nome"
-        ordem_asc = (raw_ordem != "desc")  # default asc
+        # default asc para nome
+        ordem_asc = raw_ordem != "desc"
 
     produtos_brutos = []
     mensagem = ""
     filtro_produto_api = {}
     filtro_veiculo = {"veiculoPlaca": placa} if placa else {}
 
-    print(f"Params: termo='{termo}', familia_id={familia_id}, subfamilia_id={subfamilia_id}, marca='{marca_filtro}', "
-          f"ordenar_por='{ordenar_por}', ordem_asc={ordem_asc}, placa='{placa}'")
+    print(
+        f"Params: termo='{termo}', familia_id={familia_id}, subfamilia_id={subfamilia_id}, marca='{marca_filtro}', "
+        f"ordenar_por='{ordenar_por}', ordem_asc={ordem_asc}, placa='{placa}'"
+    )
 
     # ---------- BUSCA POR TERMO ----------
     if termo:
         filtro_produto_api["nomeProduto"] = termo
         resp = search_service_instance.buscar_produtos(
-            request.token, filtro_produto=filtro_produto_api, filtro_veiculo=filtro_veiculo, itens_por_pagina=500
+            request.token,
+            filtro_produto=filtro_produto_api,
+            filtro_veiculo=filtro_veiculo,
+            itens_por_pagina=500,
         )
         if resp and resp.get("pageResult", {}).get("data"):
             produtos_brutos = resp["pageResult"]["data"]
@@ -283,7 +365,10 @@ def pesquisar_produtos():
             filtro_produto_api["ultimoNivelId"] = int(subfamilia_id)
 
         resp = search_service_instance.buscar_produtos(
-            request.token, filtro_produto=filtro_produto_api, filtro_veiculo=filtro_veiculo, itens_por_pagina=5000
+            request.token,
+            filtro_produto=filtro_produto_api,
+            filtro_veiculo=filtro_veiculo,
+            itens_por_pagina=5000,
         )
         produtos_brutos = (resp or {}).get("pageResult", {}).get("data", []) or []
 
@@ -312,50 +397,66 @@ def pesquisar_produtos():
 
     # ---------- ORDENAÇÃO ----------
     if ordenar_por == "score":
+
         def key(x):
             s = x.get("score")
             return (s is None, -(s or 0.0), (x.get("nome") or "").lower())
+
         resultados = ordenar_produtos(produtos_tratados, asc=True, key_func=key)
 
     elif ordenar_por == "vendidos":
+
         def key(x):
             v = x.get("vendidos")
             return (v is None, -(v or 0), (x.get("nome") or "").lower())
+
         resultados = ordenar_produtos(produtos_tratados, asc=True, key_func=key)
 
     elif ordenar_por == "avaliacao":
+
         def key(x):
             r = x.get("avaliacao_media")
             n = x.get("avaliacoes") or 0
             return (r is None, -(r or 0.0), -n, (x.get("nome") or "").lower())
+
         resultados = ordenar_produtos(produtos_tratados, asc=True, key_func=key)
 
     elif ordenar_por == "preco":
+
         def key(x):
             p = x.get("preco")
             return (p is None, p or 0.0, (x.get("nome") or "").lower())
+
         resultados = ordenar_produtos(produtos_tratados, asc=ordem_asc, key_func=key)
 
     else:  # nome
         resultados = ordenar_produtos(
             produtos_tratados,
             asc=ordem_asc,
-            key_func=lambda x: (x.get("nome") or "").lower()
+            key_func=lambda x: (x.get("nome") or "").lower(),
         )
 
     # ---------- PAGINAÇÃO ----------
     total_itens = len(resultados)
-    total_paginas = (total_itens + itens_por_pagina - 1) // itens_por_pagina if itens_por_pagina > 0 else 0
+    total_paginas = (
+        (total_itens + itens_por_pagina - 1) // itens_por_pagina
+        if itens_por_pagina > 0
+        else 0
+    )
     inicio = (pagina - 1) * itens_por_pagina
     fim = inicio + itens_por_pagina
 
-    print(f"Retornando {len(resultados[inicio:fim])} itens (ordenar_por={ordenar_por}, ordem_asc={ordem_asc}).")
+    print(
+        f"Retornando {len(resultados[inicio:fim])} itens (ordenar_por={ordenar_por}, ordem_asc={ordem_asc})."
+    )
 
-    return jsonify({
-        "dados": resultados[inicio:fim],
-        "pagina": pagina,
-        "total_paginas": total_paginas,
-        "mensagem": mensagem,
-        "ordenar_por": ordenar_por,
-        "ordem": "asc" if ordem_asc else "desc"
-    })
+    return jsonify(
+        {
+            "dados": resultados[inicio:fim],
+            "pagina": pagina,
+            "total_paginas": total_paginas,
+            "mensagem": mensagem,
+            "ordenar_por": ordenar_por,
+            "ordem": "asc" if ordem_asc else "desc",
+        }
+    )
