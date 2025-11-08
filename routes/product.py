@@ -11,12 +11,54 @@ from database.models import Produto
 
 from decorators.auth_decorator import login_required
 
+# =============================================================================
+# Módulo de Produtos / Carrinho
+# -----------------------------------------------------------------------------
+# Responsável por:
+# - Detalhar um produto (consultando o provedor externo) e listar similares.
+# - Persistir itens de carrinho por USUÁRIO AUTENTICADO (escopo por usuario_id).
+#
+# Observações de integração:
+# - /produto_detalhes exige token de serviço (decorator @require_token), pois
+#   consulta o provedor externo via services.search_service_instance.
+# - Rotas de carrinho exigem JWT do usuário (decorator @login_required).
+#
+# Convenções de resposta:
+# - Sucesso: {"success": True, ...} ou payload específico.
+# - Erro: {"success": False, "error": "<mensagem>"} com status HTTP adequado.
+# =============================================================================
+
 product_bp = Blueprint("product", __name__)
 
 
 @product_bp.route("/produto_detalhes", methods=["GET"])
 @require_token
 def get_produto_detalhes():
+    """Obter detalhes de um produto + similares.
+
+    Query params aceitos (qualquer um):
+      - id (int)
+      - nomeProduto (str)
+      - codigoReferencia (str)
+      - marca (str, opcional, ajuda a refinar)
+
+    Estratégia de seleção (ordem de tentativa):
+      1) Busca por codigoReferencia (+ marca, se informada)
+      2) Busca por nomeProduto (+ marca, se informada)
+      3) Busca por id (+ marca, se informada)
+      4) Superbusca (sumário) somente se houver nomeProduto ou codigoReferencia
+
+    Notas de implementação:
+      - Mantém imports locais de processadores para evitar ciclos de import em testes.
+      - _score_map() coleta o "score" retornado pelo provedor para o ID correspondente.
+      - _escolher_item() normaliza diferentes formatos de retorno e aplica a prioridade
+        de match (id -> codigo -> nome -> primeiro item).
+
+    Respostas:
+      200: {"item": {...}, "similares": [...]}
+      400: parâmetros insuficientes
+      404: produto não encontrado
+    """
     # NÃO remove esses imports locais; evitam import cycles durante testes
     from utils.processar_item import processar_item, _calcular_precos_simulados
     from utils.processar_similares import processar_similares
@@ -42,6 +84,7 @@ def get_produto_detalhes():
 
     # ---------- helpers ----------
     def _score_map(lista):
+        """Mapeia ID -> score considerando variações de estrutura do provedor."""
         mapa = {}
         for it in lista or []:
             if not isinstance(it, dict):
@@ -54,7 +97,7 @@ def get_produto_detalhes():
         return mapa
 
     def _escolher_item(itens, pid=None, cod=None, nome=None):
-        """Retorna (data_escolhida, score) usando ordem de match: id -> codigo -> nome -> primeiro."""
+        """Retorna (data_escolhida, score) com prioridade: id -> codigo -> nome -> primeiro."""
         if not itens:
             return None, None
         s_map = _score_map(itens)
@@ -152,6 +195,34 @@ def get_produto_detalhes():
 @product_bp.route("/salvar_produto", methods=["POST"])
 @login_required  # Mude de @require_token para @login_required
 def salvar_produto():
+    """Adicionar um produto ao carrinho do usuário autenticado.
+
+    Corpo JSON esperado:
+      {
+        "id_api_externa": 123,             # obrigatório (chave de referência do provedor)
+        "nome": "Pastilha de Freio",
+        "codigo_referencia": "XYZ-999",
+        "url_imagem": "https://...",
+        "preco_original": 199.9,
+        "preco_final": 159.9,
+        "desconto": 20.0,
+        "marca": "Marca X",
+        "quantidade": 2                    # opcional (default = 1)
+      }
+
+    Regras:
+      - Se o item JÁ existir no carrinho do usuário, apenas incrementa a quantidade.
+      - Caso contrário, cria o registro associado ao usuario_id atual.
+
+    Respostas:
+      201: criado (novo item)
+      200: atualizado (incremento de quantidade)
+      400: payload inválido
+      500: erro inesperado (rollback)
+
+    Observação:
+      - Há dois rollbacks no except por defesa; manter (inofensivo).
+    """
     dados = request.get_json()
     if not dados or not dados.get("id_api_externa"):
         return jsonify({"success": False, "error": "Dados inválidos"}), 400
@@ -213,8 +284,17 @@ def salvar_produto():
 
 
 @product_bp.route("/carrinho", methods=["GET"])
-@login_required # Mude de @require_token para @login_required
+@login_required  # Mude de @require_token para @login_required
 def get_produtos_carrinho():
+    """Listar todos os itens do carrinho do usuário autenticado.
+
+    Requer:
+      - Header Authorization: Bearer <jwt>
+
+    Respostas:
+      200: {"success": True, "produtos": [ ... ]}
+      500: erro interno
+    """
     try:
         # Busca apenas os produtos do usuário logado
         produtos = Produto.query.filter_by(usuario_id=request.current_user.id).all()
@@ -226,8 +306,19 @@ def get_produtos_carrinho():
 
 
 @product_bp.route("/carrinho/produto/remover", methods=["POST"])
-@login_required # Mude de @require_token para @login_required
+@login_required  # Mude de @require_token para @login_required
 def remover_produto_carrinho():
+    """Remover um item específico do carrinho do usuário autenticado.
+
+    Corpo JSON esperado:
+      { "id_api_externa": 123 }
+
+    Respostas:
+      200: removido
+      400: payload inválido
+      404: item não encontrado para este usuário
+      500: erro interno
+    """
     dados = request.get_json()
     if not dados or "id_api_externa" not in dados:
         return jsonify({"success": False, "error": "ID do produto não fornecido."}), 400
@@ -241,7 +332,6 @@ def remover_produto_carrinho():
 
         if not produto_para_remover:
             return jsonify({"success": False, "error": "Produto não encontrado no carrinho."}), 404
-        
 
         db.session.delete(produto_para_remover)
         db.session.commit()
@@ -257,8 +347,26 @@ def remover_produto_carrinho():
 
 
 @product_bp.route("/carrinho/produto/atualizar-quantidade", methods=["POST"])
-@login_required 
+@login_required
 def atualizar_quantidade_produto():
+    """Atualizar a quantidade de um item do carrinho do usuário autenticado.
+
+    Corpo JSON esperado:
+      {
+        "id_api_externa": 123,  # obrigatório
+        "quantidade": 3         # obrigatório (int, > 0 remove/atualiza)
+      }
+
+    Regras:
+      - Se quantidade <= 0, o item é removido do carrinho.
+      - Caso contrário, apenas atualiza a quantidade.
+
+    Respostas:
+      200: atualizado (ou removido com {"removido": True})
+      400: payload inválido
+      404: item inexistente no carrinho
+      500: erro interno
+    """
     dados = request.get_json() or {}
     id_api_externa = dados.get("id_api_externa")
     quantidade = dados.get("quantidade")
@@ -280,10 +388,9 @@ def atualizar_quantidade_produto():
             id_api_externa=dados.get("id_api_externa"),
             usuario_id=request.current_user.id
         ).first()
-        
+
         if not produto:
             return jsonify({"success": False, "error": "Produto não encontrado no carrinho."}), 404
-            
 
         if quantidade <= 0:
             db.session.delete(produto)

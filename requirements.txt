@@ -1,13 +1,12 @@
-cachetools
 flask
 flask-compress
 flask-cors
 requests
 python-Levenshtein
-geopy
 mysql-connector-python
 Flask-SQLAlchemy
 gunicorn
 python-dotenv
 PyJWT
-passlib[bcrypt]
+flasgger 
+pyyaml

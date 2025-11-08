@@ -6,14 +6,58 @@ from database.models import Usuario
 from utils.security import hash_password, verify_password, create_access_token
 from decorators.auth_decorator import login_required
 
+# =============================================================================
+# Módulo de Autenticação
+# -----------------------------------------------------------------------------
+# Responsável por cadastro, login e perfil do usuário.
+# - Persistência: SQLAlchemy (tabela Usuario)
+# - Senhas: hash/verify via utils.security
+# - Sessão: JWT no header Authorization: Bearer <token>
+# Convenção de erro: {"success": False, "error": "<mensagem>"} com status adequado.
+# =============================================================================
+
 auth_bp = Blueprint("auth", __name__)
 
 def _json_error(message, status=400):
+    """Retorna payload de erro padronizado para a API.
+
+    Args:
+        message (str): Mensagem de erro (curta e objetiva).
+        status (int): Código HTTP (default 400).
+
+    Returns:
+        Response: JSON {"success": False, "error": <message>} + status.
+    """
     return jsonify({"success": False, "error": message}), status
 
 
 @auth_bp.route("/register", methods=["POST"])
 def register():
+    """Registrar novo usuário.
+
+    Corpo JSON esperado:
+        {
+          "nome":  "Nome Sobrenome",   # obrigatório
+          "email": "email@dominio",    # obrigatório (único, minúsculo)
+          "senha": "segredo123"        # obrigatório
+        }
+
+    Fluxo:
+      1) Valida campos obrigatórios.
+      2) Verifica duplicidade por e-mail.
+      3) Gera hash da senha (fora do commit para capturar falhas de lib).
+      4) Persiste e confirma a transação.
+
+    Respostas:
+      201: {"success": True, "user": {...}}
+      409: Email já cadastrado.
+      400: Campos obrigatórios ausentes.
+      500: Falha ao hashear senha / erro de banco.
+
+    Observações de manutenção:
+      - db.session.flush() ajuda a revelar IntegrityError antes do commit.
+      - Mensagens de erro são propositalmente claras nesta fase (útil em dev).
+    """
     data = request.get_json(force=True, silent=True) or {}
 
     nome  = (data.get("nome")  or "").strip()
@@ -60,6 +104,28 @@ def register():
 
 @auth_bp.route("/login", methods=["POST"])
 def login():
+    """Autenticar usuário e emitir JWT.
+
+    Corpo JSON esperado:
+        {
+          "email": "email@dominio",   # obrigatório
+          "senha": "segredo123"       # obrigatório
+        }
+
+    Fluxo:
+      1) Valida presença de email e senha.
+      2) Busca usuário e confere hash.
+      3) Emite JWT via create_access_token(user.id).
+
+    Respostas:
+      200: {"success": True, "token": "<jwt>", "user": {...}}
+      401: Credenciais inválidas.
+      400: Campos obrigatórios ausentes.
+
+    Manutenção:
+      - O payload do token (sub = id) é definido em utils.security.
+      - Ajustes de claims/expiração devem ser centralizados lá.
+    """
     data = request.get_json(force=True, silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     senha = data.get("senha") or ""
@@ -78,12 +144,48 @@ def login():
 @auth_bp.route("/me", methods=["GET"])
 @login_required
 def me():
+    """Retornar dados do usuário autenticado.
+
+    Requer:
+      - Header Authorization: Bearer <jwt>
+
+    Respostas:
+      200: {"success": True, "user": {...}}
+
+    Observações:
+      - O decorador @login_required popula request.current_user.
+      - Não há acesso ao password_hash no dicionário público.
+    """
     return jsonify({"success": True, "user": request.current_user.to_public_dict()}), 200
 
 
 @auth_bp.route("/me", methods=["PUT"])
 @login_required
 def update_me():
+    """Atualizar perfil do usuário autenticado.
+
+    Corpo JSON aceito (todos opcionais):
+        {
+          "nome": "Novo Nome",
+          "telefone": "6399...",
+          "avatar_url": "https://...",
+          "senha_atual": "old",
+          "nova_senha": "new"
+        }
+
+    Regras de senha:
+      - Para trocar senha é obrigatório informar ambos: senha_atual e nova_senha.
+      - senha_atual deve validar contra o hash armazenado.
+
+    Respostas:
+      200: {"success": True, "user": {...}}
+      400: Falta de campos obrigatórios na troca de senha.
+      401: Senha atual incorreta.
+      500: Falha ao gerar novo hash.
+
+    Manutenção:
+      - Qualquer regra extra de perfil deve ser aplicada aqui (ex.: validação de avatar).
+    """
     data = request.get_json(force=True, silent=True) or {}
     u = request.current_user
 
@@ -113,6 +215,12 @@ def update_me():
 # -------- rota de diagnóstico opcional (pode remover depois) -----------------
 @auth_bp.route("/__debug/ping_db")
 def ping_db():
+    """Verifica conectividade com o banco (uso temporário para diagnóstico).
+
+    ATENÇÃO (manutenção/segurança):
+      - Rota de suporte para ambientes de dev/homolog.
+      - Evite deixá-la exposta em produção.
+    """
     try:
         db.session.execute(db.text("SELECT 1"))
         return jsonify({"ok": True})

@@ -1,0 +1,385 @@
+openapi: 3.0.3
+info:
+  title: API Oficina Mecânica
+  version: "v1"
+  description: |
+    API em Python (Flask) para gestão de autenticação de usuários (JWT), busca externa
+    de produtos (token de serviço) e carrinho por usuário. Documentação em PT-BR.
+  contact:
+    name: Suporte da API
+    email: suporte@example.com
+  license:
+    name: MIT
+servers:
+  - url: http://localhost:5000
+    description: Desenvolvimento local
+tags:
+  - name: Raiz
+    description: Diagnóstico e status da API.
+  - name: Autenticação
+    description: Registro, login e perfil do usuário (JWT).
+  - name: Busca
+    description: Integração com catálogo externo via token de serviço.
+  - name: Produto
+    description: Detalhes de produto e similares.
+  - name: Carrinho
+    description: Operações de carrinho por usuário autenticado.
+security:
+  - bearerAuth: []
+paths:
+  /:
+    get:
+      tags: [Raiz]
+      summary: Rota raiz
+      description: Retorna mensagem simples para verificar a aplicação.
+      responses:
+        '200': { description: OK }
+
+  /health:
+    get:
+      tags: [Raiz]
+      summary: Healthcheck
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+
+  /auth/register:
+    post:
+      tags: [Autenticação]
+      summary: Registrar usuário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nome, email, senha]
+              properties:
+                nome: { type: string }
+                email: { type: string, format: email }
+                senha: { type: string, minLength: 6 }
+            examples:
+              ex:
+                value: { nome: "João", email: "joao@ex.com", senha: "123456" }
+      responses:
+        '201': { description: Criado }
+        '400': { $ref: '#/components/responses/Resp400' }
+        '409': { $ref: '#/components/responses/Resp409' }
+
+  /auth/login:
+    post:
+      tags: [Autenticação]
+      summary: Login e emissão de JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, senha]
+              properties:
+                email: { type: string, format: email }
+                senha: { type: string }
+            examples:
+              ex:
+                value: { email: "joao@ex.com", senha: "123456" }
+      responses:
+        '200':
+          description: Autenticado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  token: { type: string }
+                  user: { $ref: '#/components/schemas/UsuarioPublico' }
+        '400': { $ref: '#/components/responses/Resp400' }
+        '401': { $ref: '#/components/responses/Resp401' }
+
+  /auth/me:
+    get:
+      tags: [Autenticação]
+      summary: Dados do usuário autenticado
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsuarioPublico' }
+        '401': { $ref: '#/components/responses/Resp401' }
+    put:
+      tags: [Autenticação]
+      summary: Atualizar perfil do usuário
+      description: Atualiza nome, telefone e/ou senha (usar `senha_atual` + `nova_senha`).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nome: { type: string }
+                telefone: { type: string }
+                senha_atual: { type: string }
+                nova_senha: { type: string, minLength: 6 }
+      responses:
+        '200':
+          description: Atualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsuarioPublico' }
+        '400': { $ref: '#/components/responses/Resp400' }
+        '401': { $ref: '#/components/responses/Resp401' }
+
+  /auth/__debug/ping_db:
+    get:
+      tags: [Autenticação]
+      summary: Diagnóstico do banco
+      responses:
+        '200': { description: OK }
+        '500': { $ref: '#/components/responses/Resp500' }
+
+  /montadoras:
+    get:
+      tags: [Busca]
+      summary: Listar montadoras (catálogo externo)
+      description: Não exige JWT de usuário; usa token de serviço interno.
+      responses:
+        '200': { description: Lista de montadoras }
+        '500': { $ref: '#/components/responses/Resp500' }
+
+  /familias:
+    get:
+      tags: [Busca]
+      summary: Listar famílias
+      responses:
+        '200': { description: Lista de famílias }
+        '500': { $ref: '#/components/responses/Resp500' }
+
+  /familias/{familia_id}/subfamilias:
+    get:
+      tags: [Busca]
+      summary: Listar subfamílias por família
+      parameters:
+        - in: path
+          name: familia_id
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: Lista de subfamílias }
+        '404': { $ref: '#/components/responses/Resp404' }
+
+  /autocomplete:
+    get:
+      tags: [Busca]
+      summary: Autocomplete ao vivo
+      parameters:
+        - in: query
+          name: prefix
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Sugestões
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sugestoes:
+                    type: array
+                    items: { type: string }
+
+  /facetas-produto:
+    get:
+      tags: [Busca]
+      summary: Facetas (subprodutos/marcas) para filtro
+      parameters:
+        - in: query
+          name: produto_nome
+          schema: { type: string }
+        - in: query
+          name: familia_nome
+          schema: { type: string }
+        - in: query
+          name: familia_id
+          schema: { type: integer }
+        - in: query
+          name: subfamilia_id
+          schema: { type: integer }
+        - in: query
+          name: placa
+          schema: { type: string }
+      responses:
+        '200': { description: Facetas calculadas }
+        '400': { $ref: '#/components/responses/Resp400' }
+
+  /pesquisar:
+    get:
+      tags: [Busca]
+      summary: Pesquisar produtos
+      description: Por termo ou por família/subfamília; suporta placa, marca e ordenação.
+      parameters:
+        - in: query
+          name: termo
+          schema: { type: string }
+        - in: query
+          name: familia_id
+          schema: { type: integer }
+        - in: query
+          name: familia_nome
+          schema: { type: string }
+        - in: query
+          name: subfamilia_id
+          schema: { type: integer }
+        - in: query
+          name: marca
+          schema: { type: string }
+        - in: query
+          name: placa
+          schema: { type: string }
+        - in: query
+          name: ordenar_por
+          schema: { type: string, example: "preco_final" }
+        - in: query
+          name: ordem
+          schema: { type: string, enum: [asc, desc], default: asc }
+        - in: query
+          name: pagina
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: itens_por_pagina
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: Resultados paginados }
+        '400': { $ref: '#/components/responses/Resp400' }
+
+  /produto_detalhes:
+    get:
+      tags: [Produto]
+      summary: Detalhes de produto e similares
+      parameters:
+        - in: query
+          name: id
+          schema: { type: integer }
+        - in: query
+          name: nomeProduto
+          schema: { type: string }
+        - in: query
+          name: codigoReferencia
+          schema: { type: string }
+        - in: query
+          name: marca
+          schema: { type: string }
+      responses:
+        '200': { description: Item principal e similares }
+        '400': { $ref: '#/components/responses/Resp400' }
+
+  /carrinho:
+    get:
+      tags: [Carrinho]
+      summary: Listar itens do carrinho
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Lista de itens do carrinho }
+        '401': { $ref: '#/components/responses/Resp401' }
+
+  /salvar_produto:
+    post:
+      tags: [Carrinho]
+      summary: Adicionar produto ao carrinho
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_api_externa]
+              properties:
+                id_api_externa: { type: integer }
+                nome: { type: string }
+                codigo_referencia: { type: string }
+                url_imagem: { type: string }
+                preco_original: { type: number }
+                preco_final: { type: number }
+                desconto: { type: number }
+                marca: { type: string }
+                quantidade: { type: integer, default: 1 }
+      responses:
+        '200': { description: Atualizado (incrementou quantidade) }
+        '201': { description: Criado }
+        '400': { $ref: '#/components/responses/Resp400' }
+        '401': { $ref: '#/components/responses/Resp401' }
+        '500': { $ref: '#/components/responses/Resp500' }
+
+  /carrinho/produto/remover:
+    post:
+      tags: [Carrinho]
+      summary: Remover produto do carrinho
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_api_externa]
+              properties:
+                id_api_externa: { type: integer }
+      responses:
+        '200': { description: Removido }
+        '400': { $ref: '#/components/responses/Resp400' }
+        '401': { $ref: '#/components/responses/Resp401' }
+
+  /carrinho/produto/atualizar-quantidade:
+    post:
+      tags: [Carrinho]
+      summary: Atualizar quantidade de um produto no carrinho
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id_api_externa, quantidade]
+              properties:
+                id_api_externa: { type: integer }
+                quantidade: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Atualizado }
+        '400': { $ref: '#/components/responses/Resp400' }
+        '401': { $ref: '#/components/responses/Resp401' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Resp400: { description: Requisição inválida }
+    Resp401: { description: Não autorizado }
+    Resp404: { description: Não encontrado }
+    Resp409: { description: Conflito (duplicidade) }
+    Resp500: { description: Erro interno }
+
+  schemas:
+    UsuarioPublico:
+      type: object
+      properties:
+        id: { type: integer }
+        nome: { type: string }
+        email: { type: string, format: email }
+        telefone: { type: string }

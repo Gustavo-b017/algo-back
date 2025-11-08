@@ -1,10 +1,38 @@
 # database/models.py
+"""
+Modelos de banco de dados (SQLAlchemy)
+-------------------------------------------------------------------------------
+Este módulo define as entidades persistentes da aplicação:
+
+- Usuario: representa um usuário autenticável do sistema.
+- Produto: item no "carrinho" vinculado a um usuário (escopo por usuario_id).
+
+Boas práticas/documentação:
+- Utilize `to_public_dict()` e `to_dict()` para serializar objetos sem expor
+  dados sensíveis (ex.: password_hash).
+- A constraint única em Produto evita duplicidade do mesmo item (id_api_externa)
+  para o mesmo usuário (usuario_id).
+-------------------------------------------------------------------------------
+"""
 
 from .__init__ import db
 from sqlalchemy.sql import func
 from sqlalchemy import text
 
+
 class Usuario(db.Model):
+    """Usuário autenticável da aplicação.
+
+    Campos principais:
+        - id, nome, email, password_hash
+    Opcionais:
+        - telefone, avatar_url
+    Metadados:
+        - created_at, updated_at (mantidos pelo DB via func.now()).
+
+    Relacionamentos:
+        - produtos: itens de carrinho associados (cascade delete-orphan).
+    """
     __tablename__ = "usuario"
 
     id            = db.Column(db.Integer, primary_key=True)
@@ -28,6 +56,7 @@ class Usuario(db.Model):
     )
 
     def to_public_dict(self):
+        """Serialização segura para respostas públicas (sem password_hash)."""
         return {
             "id": self.id,
             "nome": self.nome,
@@ -40,6 +69,14 @@ class Usuario(db.Model):
 
 
 class Produto(db.Model):
+    """Produto vinculado ao usuário (item de carrinho).
+
+    Observações:
+        - `usuario_id` é obrigatório: todo item pertence a um usuário.
+        - A constraint única (_usuario_produto_uc) impede duplicidades do mesmo
+          produto (id_api_externa) no carrinho do mesmo usuário.
+        - `quantidade` possui default no banco (server_default=1).
+    """
     __tablename__ = "produto"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -65,6 +102,7 @@ class Produto(db.Model):
     )
 
     def to_dict(self):
+        """Serialização para respostas de API (campos utilizados no frontend)."""
         return {
             "id": self.id,
             "id_api_externa": self.id_api_externa,
